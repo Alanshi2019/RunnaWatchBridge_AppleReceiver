@@ -9,84 +9,141 @@ struct ContentView: View {
     @State private var selectedImage: UIImage?
     @State private var ocrText: String = ""
     @State private var workout: RunnaWorkout?
-    @State private var status: String = "选择 Runna 截图，然后一键同步到 Apple Watch。"
+    @State private var status: String = "尚未识别训练计划"
     @State private var isWorking = false
     @State private var easyFast = "5:50"
     @State private var easySlow = "6:30"
 
+    private var statusPill: String {
+        if status.contains("完成") || status.contains("就位") { return "已就位" }
+        if status.contains("失败") || status.contains("错误") || status.contains("搞坏") { return "出事了" }
+        if isWorking { return "识别中" }
+        return "未识别"
+    }
+
     private var statusColor: Color {
-        if status.contains("失败") || status.contains("错误") { return .red }
-        if status.contains("完成") || status.contains("就位") { return .green }
+        if statusPill == "出事了" { return .red }
+        if statusPill == "已就位" { return .white }
         return .secondary
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    header
-                    imagePickerCard
-                    paceCard
-                    actionButton
-                    statusView
-                    previewCard
-                    ocrDisclosure
+            ZStack {
+                RunnaBackground()
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        header
+                        uploadCard
+                        resultCard
+                        paceCard
+                        watchCard
+                        actionButton
+                        privacyFooter
+                        ocrDisclosure
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 24)
+                    .padding(.bottom, 42)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 22)
-                .padding(.bottom, 36)
             }
-            .background(Color(.systemGroupedBackground))
+            .preferredColorScheme(.dark)
             .navigationBarTitleDisplayMode(.inline)
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(.blue.gradient)
-                    .frame(width: 58, height: 58)
-                Image(systemName: "figure.run")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
+        HStack(alignment: .center, spacing: 16) {
+            Circle()
+                .fill(.white.opacity(0.10))
+                .overlay(
+                    Text("🐱")
+                        .font(.system(size: 34))
+                )
+                .frame(width: 64, height: 64)
+                .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 1))
+                .shadow(color: .white.opacity(0.08), radius: 16, x: 0, y: 0)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("不逃跑计划")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                Text("把 Runna 截图变成 Apple Watch 训练。")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    Text("不逃跑计划")
+                        .font(.system(size: 34, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text("v7.0")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.white.opacity(0.12), in: Capsule())
+                        .overlay(Capsule().stroke(.white.opacity(0.22), lineWidth: 1))
+                }
+                Text("Runna → Apple Watch")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.58))
+
+                HStack(spacing: 8) {
+                    Capsule().fill(.white).frame(width: 42, height: 4)
+                    Capsule().fill(.white.opacity(0.22)).frame(width: 32, height: 4)
+                    Capsule().fill(.white.opacity(0.14)).frame(width: 32, height: 4)
+                }
+                .padding(.top, 4)
+            }
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(0.05))
+                    .frame(width: 54, height: 54)
+                    .overlay(Circle().stroke(.white.opacity(0.22), lineWidth: 1))
+                Image(systemName: "waveform.path.ecg")
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 4)
+        .padding(.bottom, 6)
     }
 
-    private var imagePickerCard: some View {
-        RunnaCard {
-            VStack(alignment: .leading, spacing: 16) {
-                sectionHeader(icon: "photo.on.rectangle.angled", title: "训练截图", subtitle: selectedImage == nil ? "从相册选择 Runna 截图" : "截图已选择")
-
-                PhotosPicker(selection: $selectedItem, matching: .images) {
-                    HStack(spacing: 10) {
-                        Image(systemName: selectedImage == nil ? "plus" : "arrow.triangle.2.circlepath")
-                            .font(.headline)
-                        Text(selectedImage == nil ? "选择截图" : "重新选择")
-                            .font(.headline)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
+    private var uploadCard: some View {
+        DarkCard {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("上传 Runna 截图")
+                            .font(.title2.bold())
+                            .foregroundStyle(.white)
+                        Text("识别你的训练计划")
+                            .font(.callout)
+                            .foregroundStyle(.white.opacity(0.55))
                     }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    Spacer()
+                    SpeechBubble(text: "上传看看！")
                 }
-                .onChange(of: selectedItem) { _, newItem in
-                    Task { await loadImage(from: newItem) }
+
+                HStack(alignment: .center, spacing: 18) {
+                    PhotosPicker(selection: $selectedItem, matching: .images) {
+                        VStack(spacing: 12) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 30, weight: .semibold))
+                            Text(selectedImage == nil ? "选择图片" : "重新选择")
+                                .font(.headline)
+                            Text("支持长截图")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.44))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 160)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(style: StrokeStyle(lineWidth: 1.2, dash: [7, 6]))
+                                .foregroundStyle(.white.opacity(0.45))
+                        )
+                        .background(.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                    .onChange(of: selectedItem) { _, newItem in
+                        Task { await loadImage(from: newItem) }
+                    }
+
+                    StrictCatView()
+                        .frame(width: 145, height: 150)
                 }
 
                 if let selectedImage {
@@ -94,23 +151,98 @@ struct ContentView: View {
                         .resizable()
                         .scaledToFit()
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .frame(maxHeight: 260)
+                        .frame(maxHeight: 240)
                         .frame(maxWidth: .infinity)
-                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.12), lineWidth: 1))
                 }
             }
         }
     }
 
-    private var paceCard: some View {
-        RunnaCard {
-            VStack(alignment: .leading, spacing: 16) {
-                sectionHeader(icon: "slider.horizontal.3", title: "配速设置", subtitle: "用于 easy / conversational pace")
-
-                HStack(spacing: 12) {
-                    paceField(title: "Easy 快", text: $easyFast, placeholder: "5:50")
-                    paceField(title: "Easy 慢", text: $easySlow, placeholder: "6:30")
+    private var resultCard: some View {
+        DarkCard(padding: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Label("识别结果", systemImage: "viewfinder")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Text(statusPill)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(statusPill == "出事了" ? .red : .white.opacity(0.72))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(.white.opacity(0.09), in: Capsule())
                 }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 15)
+
+                Divider().overlay(.white.opacity(0.12))
+
+                HStack(spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(workout?.name ?? "尚未识别训练计划")
+                            .font(.title3.bold())
+                            .foregroundStyle(.white)
+                        Text(status)
+                            .font(.callout)
+                            .foregroundStyle(statusColor.opacity(0.72))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    OrbitView()
+                        .frame(width: 128, height: 96)
+                }
+                .padding(18)
+            }
+        }
+    }
+
+    private var paceCard: some View {
+        DarkCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Label("配速设置", systemImage: "speedometer")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Label("建议配速", systemImage: "sparkles")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(.white.opacity(0.08), in: Capsule())
+                        .overlay(Capsule().stroke(.white.opacity(0.16), lineWidth: 1))
+                }
+
+                HStack(spacing: 14) {
+                    paceTile(title: "Easy Pace", icon: "face.smiling", text: $easyFast, placeholder: "5:50")
+                    paceTile(title: "Slow Pace", icon: "tortoise", text: $easySlow, placeholder: "6:30")
+                }
+            }
+        }
+    }
+
+    private var watchCard: some View {
+        DarkCard {
+            HStack(spacing: 18) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("设备连接", systemImage: "applewatch")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("Apple Watch")
+                        .font(.title2.bold())
+                        .foregroundStyle(.white)
+                    HStack(spacing: 8) {
+                        Circle().fill(.white).frame(width: 8, height: 8)
+                        Text("准备接入")
+                            .font(.callout)
+                            .foregroundStyle(.white.opacity(0.75))
+                    }
+                }
+                Spacer()
+                WatchGlyph()
+                    .frame(width: 118, height: 110)
             }
         }
     }
@@ -119,75 +251,35 @@ struct ContentView: View {
         Button {
             Task { await recognizeBuildAndSchedule() }
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 if isWorking {
-                    ProgressView()
-                        .tint(.white)
+                    ProgressView().tint(.black)
                 } else {
-                    Image(systemName: "applewatch")
+                    Image(systemName: "bolt.fill")
                         .font(.headline)
                 }
-                Text(isWorking ? "同步中..." : "同步到 Apple Watch")
+                Text(isWorking ? "创建中..." : "创建并发送到 Apple Watch")
+                    .font(.headline.weight(.bold))
+                Spacer(minLength: 0)
+                Image(systemName: "paperplane.fill")
                     .font(.headline)
             }
+            .foregroundStyle(.black)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 18)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .foregroundStyle(.white)
-            .background(selectedImage == nil || isWorking ? Color.gray.opacity(0.45) : Color.blue, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(.white.opacity(selectedImage == nil || isWorking ? 0.45 : 1), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: .white.opacity(selectedImage == nil ? 0 : 0.22), radius: 16, x: 0, y: 0)
         }
         .disabled(selectedImage == nil || isWorking)
         .buttonStyle(.plain)
-        .shadow(color: .blue.opacity(selectedImage == nil ? 0 : 0.22), radius: 14, x: 0, y: 8)
     }
 
-    private var statusView: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: statusColor == .red ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(statusColor)
-                .padding(.top, 1)
-            Text(status)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    @ViewBuilder
-    private var previewCard: some View {
-        if let workout {
-            RunnaCard {
-                VStack(alignment: .leading, spacing: 14) {
-                    sectionHeader(icon: "list.bullet.rectangle", title: "训练预览", subtitle: workout.name)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(workout.steps) { step in
-                            if step.type == .repeat {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(step.summary)
-                                        .font(.headline)
-                                    ForEach(step.steps ?? []) { child in
-                                        Text(child.summary)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                            .padding(.leading, 14)
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            } else {
-                                Text(step.summary)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-        }
+    private var privacyFooter: some View {
+        Label("所有数据在本地处理，保护你的隐私", systemImage: "lock.fill")
+            .font(.caption)
+            .foregroundStyle(.white.opacity(0.42))
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     @ViewBuilder
@@ -196,51 +288,51 @@ struct ContentView: View {
             DisclosureGroup {
                 TextEditor(text: $ocrText)
                     .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.75))
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 120)
                     .padding(10)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             } label: {
                 Label("识别文本", systemImage: "text.viewfinder")
                     .font(.headline)
+                    .foregroundStyle(.white)
             }
             .padding(16)
-            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.14), lineWidth: 1))
         }
     }
 
-    private func sectionHeader(icon: String, title: String, subtitle: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon)
-                .font(.headline)
-                .foregroundStyle(.blue)
-                .frame(width: 28, height: 28)
-                .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 3) {
+    private func paceTile(title: String, icon: String, text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
                 Text(title)
-                    .font(.headline)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.66))
+                Spacer()
+                Image(systemName: icon)
+                    .foregroundStyle(.white.opacity(0.75))
             }
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func paceField(title: String, text: Binding<String>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
             TextField(placeholder, text: text)
-                .font(.system(.body, design: .rounded).weight(.semibold))
+                .font(.system(size: 34, weight: .bold, design: .rounded))
                 .keyboardType(.numbersAndPunctuation)
                 .textFieldStyle(.plain)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .foregroundStyle(.white)
+            Text("min / km")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.42))
+            Capsule()
+                .fill(.white)
+                .frame(width: 42, height: 3)
+                .overlay(alignment: .trailing) {
+                    Capsule().fill(.white.opacity(0.16)).frame(width: 96, height: 3).offset(x: 96)
+                }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.17), lineWidth: 1))
     }
 
     private func loadImage(from item: PhotosPickerItem?) async {
@@ -252,11 +344,11 @@ struct ContentView: View {
                     selectedImage = image
                     ocrText = ""
                     workout = nil
-                    status = "截图已就位。"
+                    status = "截图已就位。严厉小猫开始盯着你。"
                 }
             }
         } catch {
-            await MainActor.run { status = "读图失败：\(error.localizedDescription)" }
+            await MainActor.run { status = "同步失败：读图失败：\(error.localizedDescription)" }
         }
     }
 
@@ -277,7 +369,7 @@ struct ContentView: View {
             await MainActor.run {
                 ocrText = text
                 workout = parsed
-                status = "同步完成。"
+                status = "同步完成。要活着回来啊。"
             }
         } catch {
             await MainActor.run {
@@ -307,17 +399,118 @@ struct ContentView: View {
     }
 }
 
-private struct RunnaCard<Content: View>: View {
+private struct DarkCard<Content: View>: View {
+    var padding: CGFloat = 18
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            content
+        VStack(alignment: .leading, spacing: 0) { content }
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(.white.opacity(0.045))
+                    .background(.ultraThinMaterial.opacity(0.18), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            )
+            .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.14), lineWidth: 1))
+            .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 12)
+    }
+}
+
+private struct RunnaBackground: View {
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            RadialGradient(colors: [.white.opacity(0.08), .clear], center: .topLeading, startRadius: 20, endRadius: 360)
+                .ignoresSafeArea()
+            RadialGradient(colors: [.white.opacity(0.055), .clear], center: .bottomTrailing, startRadius: 60, endRadius: 440)
+                .ignoresSafeArea()
+            LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: Color.black.opacity(0.06), radius: 18, x: 0, y: 8)
+    }
+}
+
+private struct SpeechBubble: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(.white.opacity(0.055), in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.32), lineWidth: 1))
+            .rotationEffect(.degrees(-7))
+    }
+}
+
+private struct StrictCatView: View {
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                Spacer()
+                Rectangle().fill(.white.opacity(0.65)).frame(height: 1)
+                    .padding(.horizontal, 4)
+                Text("识别更准更快")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.42))
+                    .padding(.top, 10)
+            }
+            Text("😾")
+                .font(.system(size: 74))
+                .offset(y: 6)
+                .shadow(color: .white.opacity(0.14), radius: 12, x: 0, y: 0)
+            Image(systemName: "sparkles")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.75))
+                .offset(x: -50, y: -42)
+            Image(systemName: "sparkles")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.6))
+                .offset(x: 52, y: -34)
+        }
+    }
+}
+
+private struct OrbitView: View {
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { i in
+                Ellipse()
+                    .stroke(.white.opacity(0.15), style: StrokeStyle(lineWidth: 1, dash: [4, 5]))
+                    .frame(width: CGFloat(92 + i * 18), height: CGFloat(42 + i * 10))
+                    .rotationEffect(.degrees(Double(i * 18)))
+            }
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.white.opacity(0.74), lineWidth: 1.4)
+                .frame(width: 44, height: 44)
+            Image(systemName: "waveform.path.ecg")
+                .foregroundStyle(.white)
+                .font(.headline)
+            Circle().fill(.white).frame(width: 8, height: 8).offset(x: 46, y: -24)
+            Circle().fill(.white.opacity(0.75)).frame(width: 6, height: 6).offset(x: -52, y: 18)
+        }
+    }
+}
+
+private struct WatchGlyph: View {
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .stroke(.white.opacity(Double(3 - i) * 0.035), lineWidth: 1)
+                    .frame(width: CGFloat(70 + i * 24), height: CGFloat(70 + i * 24))
+            }
+            RoundedRectangle(cornerRadius: 19, style: .continuous)
+                .stroke(.white.opacity(0.8), lineWidth: 3)
+                .frame(width: 58, height: 74)
+            RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.72)).frame(width: 28, height: 10).offset(y: -46)
+            RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.72)).frame(width: 28, height: 10).offset(y: 46)
+            Image(systemName: "checkmark")
+                .font(.title2.bold())
+                .foregroundStyle(.white)
+        }
     }
 }
 
