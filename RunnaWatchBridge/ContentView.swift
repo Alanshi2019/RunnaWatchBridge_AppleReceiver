@@ -9,112 +9,237 @@ struct ContentView: View {
     @State private var selectedImage: UIImage?
     @State private var ocrText: String = ""
     @State private var workout: RunnaWorkout?
-    @State private var status: String = "选择 Runna 截图，然后一键接入。v6 会把配速写进 Apple 训练。"
+    @State private var status: String = "选择 Runna 截图，然后一键同步到 Apple Watch。"
     @State private var isWorking = false
     @State private var easyFast = "5:50"
     @State private var easySlow = "6:30"
 
+    private var statusColor: Color {
+        if status.contains("失败") || status.contains("错误") { return .red }
+        if status.contains("完成") || status.contains("就位") { return .green }
+        return .secondary
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("不逃跑计划 Apple v6")
-                            .font(.largeTitle.bold())
-                        Text("全体起立！")
+                    header
+                    imagePickerCard
+                    paceCard
+                    actionButton
+                    statusView
+                    previewCard
+                    ocrDisclosure
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 22)
+                .padding(.bottom, 36)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(.blue.gradient)
+                    .frame(width: 58, height: 58)
+                Image(systemName: "figure.run")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("不逃跑计划")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                Text("把 Runna 截图变成 Apple Watch 训练。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 4)
+    }
+
+    private var imagePickerCard: some View {
+        RunnaCard {
+            VStack(alignment: .leading, spacing: 16) {
+                sectionHeader(icon: "photo.on.rectangle.angled", title: "训练截图", subtitle: selectedImage == nil ? "从相册选择 Runna 截图" : "截图已选择")
+
+                PhotosPicker(selection: $selectedItem, matching: .images) {
+                    HStack(spacing: 10) {
+                        Image(systemName: selectedImage == nil ? "plus" : "arrow.triangle.2.circlepath")
+                            .font(.headline)
+                        Text(selectedImage == nil ? "选择截图" : "重新选择")
+                            .font(.headline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .onChange(of: selectedItem) { _, newItem in
+                    Task { await loadImage(from: newItem) }
+                }
 
-                    GroupBox("今天怎么说") {
-                        VStack(alignment: .leading, spacing: 12) {
-                            PhotosPicker(selection: $selectedItem, matching: .images) {
-                                HStack {
-                                    Image(systemName: "photo")
-                                    Text(selectedImage == nil ? "选择 Runna 截图" : "重新选择截图")
-                                }
-                                .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .onChange(of: selectedItem) { _, newItem in
-                                Task { await loadImage(from: newItem) }
-                            }
-
-                            if let selectedImage {
-                                Image(uiImage: selectedImage)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .frame(maxHeight: 260)
-                            }
-                        }
-                    }
-
-                    GroupBox("调整建模") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text("Easy 快")
-                                TextField("5:50", text: $easyFast)
-                                    .textFieldStyle(.roundedBorder)
-                                    .keyboardType(.numbersAndPunctuation)
-                                Text("慢")
-                                TextField("6:30", text: $easySlow)
-                                    .textFieldStyle(.roundedBorder)
-                                    .keyboardType(.numbersAndPunctuation)
-                            }
-                            Text("太慢也可以不填")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button {
-                        Task { await recognizeBuildAndSchedule() }
-                    } label: {
-                        HStack {
-                            if isWorking { ProgressView() }
-                            Text(isWorking ? "接入中..." : "创建训练并同步到 Apple Watch")
-                        }
+                if let selectedImage {
+                    Image(uiImage: selectedImage)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .frame(maxHeight: 260)
                         .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(selectedImage == nil || isWorking)
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+            }
+        }
+    }
 
-                    Text(status)
-                        .font(.callout)
-                        .foregroundStyle(status.contains("哦吼") ? .red : .secondary)
-                        .multilineTextAlignment(.leading)
+    private var paceCard: some View {
+        RunnaCard {
+            VStack(alignment: .leading, spacing: 16) {
+                sectionHeader(icon: "slider.horizontal.3", title: "配速设置", subtitle: "用于 easy / conversational pace")
 
-                    if let workout {
-                        GroupBox("训练预览") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(workout.name).bold()
-                                ForEach(workout.steps) { step in
-                                    if step.type == .repeat {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(step.summary).bold()
-                                            ForEach(step.steps ?? []) { child in
-                                                Text("  • \(child.summary)")
-                                            }
-                                        }
-                                    } else {
-                                        Text(step.summary)
+                HStack(spacing: 12) {
+                    paceField(title: "Easy 快", text: $easyFast, placeholder: "5:50")
+                    paceField(title: "Easy 慢", text: $easySlow, placeholder: "6:30")
+                }
+            }
+        }
+    }
+
+    private var actionButton: some View {
+        Button {
+            Task { await recognizeBuildAndSchedule() }
+        } label: {
+            HStack(spacing: 10) {
+                if isWorking {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: "applewatch")
+                        .font(.headline)
+                }
+                Text(isWorking ? "同步中..." : "同步到 Apple Watch")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .foregroundStyle(.white)
+            .background(selectedImage == nil || isWorking ? Color.gray.opacity(0.45) : Color.blue, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .disabled(selectedImage == nil || isWorking)
+        .buttonStyle(.plain)
+        .shadow(color: .blue.opacity(selectedImage == nil ? 0 : 0.22), radius: 14, x: 0, y: 8)
+    }
+
+    private var statusView: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: statusColor == .red ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(statusColor)
+                .padding(.top, 1)
+            Text(status)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var previewCard: some View {
+        if let workout {
+            RunnaCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    sectionHeader(icon: "list.bullet.rectangle", title: "训练预览", subtitle: workout.name)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(workout.steps) { step in
+                            if step.type == .repeat {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(step.summary)
+                                        .font(.headline)
+                                    ForEach(step.steps ?? []) { child in
+                                        Text(child.summary)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.leading, 14)
                                     }
                                 }
+                                .padding(.vertical, 4)
+                            } else {
+                                Text(step.summary)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-
-                    if !ocrText.isEmpty {
-                        DisclosureGroup("识别文本") {
-                            TextEditor(text: $ocrText)
-                                .font(.system(.caption, design: .monospaced))
-                                .frame(minHeight: 140)
-                        }
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var ocrDisclosure: some View {
+        if !ocrText.isEmpty {
+            DisclosureGroup {
+                TextEditor(text: $ocrText)
+                    .font(.system(.caption, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 120)
+                    .padding(10)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            } label: {
+                Label("识别文本", systemImage: "text.viewfinder")
+                    .font(.headline)
+            }
+            .padding(16)
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+    }
+
+    private func sectionHeader(icon: String, title: String, subtitle: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.headline)
+                .foregroundStyle(.blue)
+                .frame(width: 28, height: 28)
+                .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func paceField(title: String, text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField(placeholder, text: text)
+                .font(.system(.body, design: .rounded).weight(.semibold))
+                .keyboardType(.numbersAndPunctuation)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
@@ -131,7 +256,7 @@ struct ContentView: View {
                 }
             }
         } catch {
-            await MainActor.run { status = "哦吼，读图失败：\(error.localizedDescription)" }
+            await MainActor.run { status = "读图失败：\(error.localizedDescription)" }
         }
     }
 
@@ -152,11 +277,11 @@ struct ContentView: View {
             await MainActor.run {
                 ocrText = text
                 workout = parsed
-                status = "接入完成，要活着回来啊。"
+                status = "同步完成。"
             }
         } catch {
             await MainActor.run {
-                status = "哦吼，搞坏了：\(error.localizedDescription)"
+                status = "同步失败：\(error.localizedDescription)"
             }
         }
     }
@@ -179,6 +304,20 @@ struct ContentView: View {
         } else {
             throw NSError(domain: "RunnaWatchBridge", code: 3, userInfo: [NSLocalizedDescriptionKey: "Requires iOS 17+"])
         }
+    }
+}
+
+private struct RunnaCard<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: Color.black.opacity(0.06), radius: 18, x: 0, y: 8)
     }
 }
 
