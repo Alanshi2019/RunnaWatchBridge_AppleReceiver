@@ -1,0 +1,17 @@
+{
+  "name": "Runna Rolling 400s",
+  "scheduledDate": null,
+  "steps": [
+    { "type": "warmup", "distanceMeters": 2000, "paceMin": "6:00", "paceMax": "7:00" },
+    {
+      "type": "repeat",
+      "iterations": 4,
+      "steps": [
+        { "type": "run", "distanceMeters": 400, "paceMin": "5:00", "paceMax": "5:00" },
+        { "type": "run", "distanceMeters": 400, "paceMin": "5:40", "paceMax": "5:40" },
+        { "type": "rest", "durationSeconds": 90 }
+      ]
+    },
+    { "type": "cooldown", "distanceMeters": 1200, "paceMin": "6:00", "paceMax": "7:00" }
+  ]
+}
