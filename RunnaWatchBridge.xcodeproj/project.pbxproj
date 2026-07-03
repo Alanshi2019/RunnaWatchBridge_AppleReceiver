@@ -16,6 +16,7 @@
 		A10000000000000000000007 /* RunnaUIComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* RunnaUIComponents.swift */; };
 		A10000000000000000000008 /* StepEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* StepEditorView.swift */; };
 		A10000000000000000000009 /* RunnaBridgeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* RunnaBridgeHomeView.swift */; };
+		CA4C085C2FF83ADE005EA372 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CA4C085B2FF83ADE005EA372 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 		A20000000000000000000008 /* RunnaUIComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnaUIComponents.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* StepEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepEditorView.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* RunnaBridgeHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnaBridgeHomeView.swift; sourceTree = "<group>"; };
+		CA4C085B2FF83ADE005EA372 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +62,7 @@
 				A20000000000000000000008 /* RunnaUIComponents.swift */,
 				A20000000000000000000009 /* StepEditorView.swift */,
 				A20000000000000000000007 /* RunnaParsing.swift */,
+				CA4C085B2FF83ADE005EA372 /* Assets.xcassets */,
 				A20000000000000000000003 /* RunnaWorkoutModels.swift */,
 				A20000000000000000000004 /* WorkoutKitBuilder.swift */,
 				A20000000000000000000005 /* PlaceholderWorkout.json */,
@@ -134,6 +137,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CA4C085C2FF83ADE005EA372 /* Assets.xcassets in Resources */,
 				A10000000000000000000005 /* PlaceholderWorkout.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
