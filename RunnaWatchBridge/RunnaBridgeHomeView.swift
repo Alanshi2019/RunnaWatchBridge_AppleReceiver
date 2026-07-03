@@ -16,7 +16,12 @@ struct RunnaBridgeHomeView: View {
     @State private var resultTitle = ""
     @State private var resultMessage = ""
 
-    private let paceOptions = ["4:30", "4:45", "5:00", "5:15", "5:30", "5:45", "6:00", "6:15", "6:30", "6:45", "7:00", "7:15", "7:30"]
+    private let paceOptions: [String] = stride(from: 180, through: 600, by: 5).map { totalSeconds in
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+    
     private var stepCount: Int { countSteps(workout?.steps ?? []) }
 
     var body: some View {
