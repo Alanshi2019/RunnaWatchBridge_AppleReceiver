@@ -70,22 +70,34 @@ enum WorkoutKitBuilder {
         return .open
     }
 
-    // Apple WorkoutKit pace alerts are expressed as speed ranges.
-    // pace mm:ss/km -> speed meters/second. Faster pace = larger speed.
     private static func paceAlert(for step: RunnaStep) -> SpeedRangeAlert? {
         guard let paceMin = step.paceMin, let fast = metersPerSecond(fromPace: paceMin) else {
             return nil
         }
+
         let slow = step.paceMax.flatMap { metersPerSecond(fromPace: $0) } ?? fast
-        let lower = min(fast, slow)
-        let upper = max(fast, slow)
-        guard lower > 0, upper > 0 else { return nil }
+        guard fast.isFinite, slow.isFinite, fast > 0, slow > 0 else { return nil }
+
+        var lower = min(fast, slow)
+        var upper = max(fast, slow)
+
+        // WorkoutKit crashes with unsupportedRange when speed range has zero width.
+        // This happens when OCR/manual edit gives an exact pace like 5:00...5:00.
+        let minimumWidth = 0.05
+        if upper - lower < minimumWidth {
+            let center = (upper + lower) / 2
+            lower = max(0.01, center - minimumWidth / 2)
+            upper = center + minimumWidth / 2
+        }
+
         return .speed(lower...upper, unit: .metersPerSecond, metric: .current)
     }
 
     private static func metersPerSecond(fromPace pace: String) -> Double? {
         let parts = pace.split(separator: ":")
-        guard parts.count == 2, let minutes = Double(parts[0]), let seconds = Double(parts[1]) else {
+        guard parts.count == 2,
+              let minutes = Double(parts[0]),
+              let seconds = Double(parts[1]) else {
             return nil
         }
         let totalSeconds = minutes * 60 + seconds
