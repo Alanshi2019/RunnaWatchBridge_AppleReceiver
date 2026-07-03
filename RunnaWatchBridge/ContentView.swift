@@ -14,6 +14,9 @@ struct ContentView: View {
     @State private var isWorking = false
     @State private var easyFast = "5:45"
     @State private var easySlow = "6:30"
+    @State private var editingIndex: Int?
+    @State private var draftStep = EditableStep()
+    @State private var showEditor = false
 
     private let paceOptions: [String] = [
         "4:30", "4:35", "4:40", "4:45", "4:50", "4:55",
@@ -49,6 +52,13 @@ struct ContentView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showEditor) {
+                StepEditorView(draft: $draftStep) {
+                    saveDraftStep()
+                    showEditor = false
+                }
+                .presentationDetents([.large])
+            }
         }
     }
 
@@ -133,9 +143,9 @@ struct ContentView: View {
                     Spacer()
 
                     Button {
-                        // 编辑弹窗会在下一步加，这里先保留入口。
+                        ocrText = workoutToEditableText(workout)
                     } label: {
-                        Image(systemName: "pencil")
+                        Image(systemName: "text.cursor")
                             .font(.headline)
                             .foregroundStyle(.purple)
                             .frame(width: 38, height: 38)
@@ -146,14 +156,16 @@ struct ContentView: View {
 
                 VStack(spacing: 12) {
                     ForEach(Array((workout?.steps ?? []).enumerated()), id: \.element.id) { index, step in
-                        StepCard(step: step, index: index) {
+                        StepCard(step: step) {
+                            startEditing(index: index, step: step)
+                        } onDelete: {
                             deleteStep(at: index)
                         }
                     }
                 }
 
                 Button {
-                    // Add Step 会在第二步做。
+                    addStep()
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "plus")
@@ -189,7 +201,7 @@ struct ContentView: View {
                         .background(Color.green, in: Capsule())
                 }
 
-                Text("Applied to easy / warmup / cooldown steps")
+                Text("Applied to \(easyAffectedCount) easy / warmup / cooldown steps")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -201,8 +213,16 @@ struct ContentView: View {
                         .padding(.top, 30)
                     paceWheel(title: "MAX", selection: $easySlow)
                 }
+
+                EasyPaceRangeBar(options: paceOptions, fast: easyFast, slow: easySlow)
             }
         }
+        .onChange(of: easyFast) { _, _ in applyEasyPaceToEasySteps() }
+        .onChange(of: easySlow) { _, _ in applyEasyPaceToEasySteps() }
+    }
+
+    private var easyAffectedCount: Int {
+        countEasyAffected(workout?.steps ?? [])
     }
 
     private func paceWheel(title: String, selection: Binding<String>) -> some View {
@@ -273,11 +293,71 @@ struct ContentView: View {
         }
     }
 
+    private func startEditing(index: Int, step: RunnaStep) {
+        editingIndex = index
+        draftStep = EditableStep(step: step)
+        showEditor = true
+    }
+
+    private func saveDraftStep() {
+        guard var current = workout, let index = editingIndex, current.steps.indices.contains(index) else { return }
+        current.steps[index] = draftStep.toRunnaStep()
+        workout = current
+        ocrText = workoutToEditableText(current)
+        status = "已更新 step。"
+    }
+
+    private func addStep() {
+        var current = workout ?? RunnaWorkout(name: "Runna Custom", scheduledDate: nil, steps: [])
+        let step = RunnaStep(type: .run, distanceMeters: 400, durationSeconds: nil, paceMin: easyFast, paceMax: easySlow, iterations: nil, steps: nil)
+        current.steps.append(step)
+        workout = current
+        ocrText = workoutToEditableText(current)
+        status = "已添加 1 个 step。"
+    }
+
     private func deleteStep(at index: Int) {
         guard var current = workout, current.steps.indices.contains(index) else { return }
         current.steps.remove(at: index)
         workout = current
+        ocrText = workoutToEditableText(current)
         status = "已删除 1 个 step。"
+    }
+
+    private func applyEasyPaceToEasySteps() {
+        guard var current = workout else { return }
+        current.steps = applyEasyPace(current.steps)
+        workout = current
+    }
+
+    private func applyEasyPace(_ steps: [RunnaStep]) -> [RunnaStep] {
+        steps.map { step in
+            var updated = step
+            if step.type == .warmup || step.type == .cooldown || step.type == .run {
+                let hasSpecificPace = step.paceMin != nil && step.paceMin == step.paceMax && step.paceMin != easyFast && step.paceMin != easySlow
+                if !hasSpecificPace {
+                    updated.paceMin = easyFast
+                    updated.paceMax = easySlow
+                }
+            }
+            if let children = step.steps {
+                updated.steps = applyEasyPace(children)
+            }
+            return updated
+        }
+    }
+
+    private func countEasyAffected(_ steps: [RunnaStep]) -> Int {
+        steps.reduce(0) { total, step in
+            var count = total
+            if step.type == .warmup || step.type == .cooldown || step.type == .run {
+                count += 1
+            }
+            if let children = step.steps {
+                count += countEasyAffected(children)
+            }
+            return count
+        }
     }
 
     private func countSteps(_ steps: [RunnaStep]) -> Int {
@@ -286,6 +366,27 @@ struct ContentView: View {
                 return total + 1 + countSteps(step.steps ?? [])
             }
             return total + 1
+        }
+    }
+
+    private func workoutToEditableText(_ workout: RunnaWorkout?) -> String {
+        guard let workout else { return "" }
+        return workout.steps.map { stepToText($0) }.joined(separator: "\n")
+    }
+
+    private func stepToText(_ step: RunnaStep) -> String {
+        switch step.type {
+        case .repeat:
+            let inner = (step.steps ?? []).map { "  " + stepToText($0) }.joined(separator: "\n")
+            return "Repeat x\(step.iterations ?? 1)" + (inner.isEmpty ? "" : "\n\(inner)")
+        case .warmup:
+            return "Warm Up - \(Int(step.distanceMeters ?? 0))m - Easy"
+        case .cooldown:
+            return "Cool Down - \(Int(step.distanceMeters ?? 0))m - Easy"
+        case .recovery, .rest:
+            return "Recovery - \(Int(step.durationSeconds ?? 0))s"
+        case .run:
+            return "Run - \(Int(step.distanceMeters ?? 0))m @ \(step.paceMin ?? easyFast)"
         }
     }
 
@@ -361,16 +462,95 @@ struct ContentView: View {
     }
 }
 
+private struct EditableStep {
+    var type: RunnaStepType = .run
+    var distanceMeters: String = "400"
+    var durationSeconds: String = "90"
+    var paceMin: String = "5:45"
+    var paceMax: String = "6:30"
+    var iterations: String = "1"
+
+    init() {}
+
+    init(step: RunnaStep) {
+        type = step.type
+        distanceMeters = step.distanceMeters.map { String(Int($0)) } ?? ""
+        durationSeconds = step.durationSeconds.map { String(Int($0)) } ?? ""
+        paceMin = step.paceMin ?? ""
+        paceMax = step.paceMax ?? ""
+        iterations = step.iterations.map(String.init) ?? "1"
+    }
+
+    func toRunnaStep() -> RunnaStep {
+        RunnaStep(
+            type: type,
+            distanceMeters: Double(distanceMeters),
+            durationSeconds: Double(durationSeconds),
+            paceMin: paceMin.isEmpty ? nil : paceMin,
+            paceMax: paceMax.isEmpty ? nil : paceMax,
+            iterations: Int(iterations),
+            steps: type == .repeat ? [RunnaStep(type: .run, distanceMeters: Double(distanceMeters) ?? 400, durationSeconds: nil, paceMin: paceMin.isEmpty ? nil : paceMin, paceMax: paceMax.isEmpty ? nil : paceMax, iterations: nil, steps: nil)] : nil
+        )
+    }
+}
+
+private struct StepEditorView: View {
+    @Binding var draft: EditableStep
+    let onSave: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Step type") {
+                    Picker("Type", selection: $draft.type) {
+                        Text("Warm-up").tag(RunnaStepType.warmup)
+                        Text("Run").tag(RunnaStepType.run)
+                        Text("Recovery").tag(RunnaStepType.recovery)
+                        Text("Cool-down").tag(RunnaStepType.cooldown)
+                        Text("Repeat").tag(RunnaStepType.repeat)
+                    }
+                }
+
+                Section("Fields") {
+                    if draft.type == .repeat {
+                        TextField("Iterations", text: $draft.iterations)
+                            .keyboardType(.numberPad)
+                    }
+                    if draft.type != .recovery && draft.type != .rest {
+                        TextField("Distance meters", text: $draft.distanceMeters)
+                            .keyboardType(.decimalPad)
+                    }
+                    if draft.type == .recovery || draft.type == .rest {
+                        TextField("Duration seconds", text: $draft.durationSeconds)
+                            .keyboardType(.decimalPad)
+                    }
+                    TextField("Pace min", text: $draft.paceMin)
+                        .keyboardType(.numbersAndPunctuation)
+                    TextField("Pace max", text: $draft.paceMax)
+                        .keyboardType(.numbersAndPunctuation)
+                }
+            }
+            .navigationTitle("Edit Step")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: onSave)
+                }
+            }
+        }
+    }
+}
+
 private struct StepCard: View {
     let step: RunnaStep
-    let index: Int
+    let onEdit: () -> Void
     let onDelete: () -> Void
 
     private var accent: Color {
         switch step.type {
         case .warmup: return .orange
         case .cooldown: return .red
-        case .recovery: return .cyan
+        case .recovery, .rest: return .cyan
         case .repeat: return .purple
         case .run: return .green
         }
@@ -380,7 +560,7 @@ private struct StepCard: View {
         switch step.type {
         case .warmup: return "Warm-up"
         case .cooldown: return "Cool-down"
-        case .recovery: return "Recovery"
+        case .recovery, .rest: return "Recovery"
         case .repeat: return "Interval"
         case .run: return "Easy"
         }
@@ -429,7 +609,7 @@ private struct StepCard: View {
             Spacer(minLength: 6)
 
             HStack(spacing: 10) {
-                Button {} label: {
+                Button(action: onEdit) {
                     Image(systemName: "pencil")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
@@ -438,7 +618,7 @@ private struct StepCard: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(role: .destructive) { onDelete() } label: {
+                Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.red)
@@ -450,6 +630,39 @@ private struct StepCard: View {
         }
         .padding(14)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private struct EasyPaceRangeBar: View {
+    let options: [String]
+    let fast: String
+    let slow: String
+
+    private var start: CGFloat {
+        guard let idx = options.firstIndex(of: fast), options.count > 1 else { return 0 }
+        return CGFloat(idx) / CGFloat(options.count - 1)
+    }
+
+    private var end: CGFloat {
+        guard let idx = options.firstIndex(of: slow), options.count > 1 else { return 1 }
+        return CGFloat(idx) / CGFloat(options.count - 1)
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let left = min(start, end) * geo.size.width
+            let right = max(start, end) * geo.size.width
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color(.systemGray5)).frame(height: 8)
+                Capsule().fill(Color.green).frame(width: max(10, right - left), height: 8).offset(x: left)
+                Circle().fill(.white).overlay(Circle().stroke(Color.green, lineWidth: 3)).frame(width: 18, height: 18).offset(x: max(0, left - 9))
+                Circle().fill(.white).overlay(Circle().stroke(Color.green, lineWidth: 3)).frame(width: 18, height: 18).offset(x: min(geo.size.width - 18, right - 9))
+            }
+        }
+        .frame(height: 22)
+        .overlay(alignment: .bottomLeading) { Text("faster").font(.caption2).foregroundStyle(.secondary).offset(y: 14) }
+        .overlay(alignment: .bottomTrailing) { Text("slower").font(.caption2).foregroundStyle(.secondary).offset(y: 14) }
+        .padding(.bottom, 12)
     }
 }
 
