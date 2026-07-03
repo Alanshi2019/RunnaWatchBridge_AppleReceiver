@@ -80,39 +80,11 @@ struct ContentView: View {
 
     private var uploadCard: some View {
         PhotosPicker(selection: $selectedItem, matching: .images) {
-            HStack(spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(selectedImage == nil ? Color.purple.opacity(0.11) : Color.blue.opacity(0.10))
-                    Image(systemName: selectedImage == nil ? "photo.on.rectangle.angled" : "checkmark.circle.fill")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(selectedImage == nil ? .purple : .green)
-                }
-                .frame(width: 58, height: 58)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(selectedImage == nil ? "上传 Runna 截图" : uploadedFileName)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(selectedImage == nil ? "支持长截图" : "✓ \(recognizedStepCount) steps recognised")
-                        .font(.subheadline.weight(selectedImage == nil ? .regular : .semibold))
-                        .foregroundStyle(selectedImage == nil ? .secondary : .green)
-                }
-
-                Spacer()
-
-                Text(selectedImage == nil ? "选择" : "Replace")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(selectedImage == nil ? .purple : .primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(Color(.secondarySystemGroupedBackground), in: Capsule())
-            }
-            .padding(18)
-            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color(.systemGray6), lineWidth: 1))
-            .shadow(color: .black.opacity(0.055), radius: 18, x: 0, y: 10)
+            UploadPickerRow(
+                hasImage: selectedImage != nil,
+                fileName: uploadedFileName,
+                stepCount: recognizedStepCount
+            )
         }
         .buttonStyle(.plain)
         .onChange(of: selectedItem) { _, newItem in
@@ -459,6 +431,57 @@ struct ContentView: View {
         } else {
             throw NSError(domain: "RunnaWatchBridge", code: 3, userInfo: [NSLocalizedDescriptionKey: "Requires iOS 17+"])
         }
+    }
+}
+
+private struct UploadPickerRow: View {
+    let hasImage: Bool
+    let fileName: String
+    let stepCount: Int
+
+    var body: some View {
+        HStack(spacing: 16) {
+            icon
+            textBlock
+            Spacer()
+            actionLabel
+        }
+        .padding(18)
+        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color(.systemGray6), lineWidth: 1))
+        .shadow(color: .black.opacity(0.055), radius: 18, x: 0, y: 10)
+    }
+
+    private var icon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(hasImage ? Color.blue.opacity(0.10) : Color.purple.opacity(0.11))
+            Image(systemName: hasImage ? "checkmark.circle.fill" : "photo.on.rectangle.angled")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(hasImage ? .green : .purple)
+        }
+        .frame(width: 58, height: 58)
+    }
+
+    private var textBlock: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(hasImage ? fileName : "上传 Runna 截图")
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Text(hasImage ? "✓ \(stepCount) steps recognised" : "支持长截图")
+                .font(.subheadline.weight(hasImage ? .semibold : .regular))
+                .foregroundStyle(hasImage ? .green : .secondary)
+        }
+    }
+
+    private var actionLabel: some View {
+        Text(hasImage ? "Replace" : "选择")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(hasImage ? .primary : .purple)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(Color(.secondarySystemGroupedBackground), in: Capsule())
     }
 }
 
