@@ -9,7 +9,7 @@ struct ContentView: View {
     @State private var selectedImage: UIImage?
     @State private var ocrText: String = ""
     @State private var workout: RunnaWorkout?
-    @State private var status: String = "尚未识别训练计划"
+    @State private var status: String = "上传 Runna 截图开始。"
     @State private var isWorking = false
     @State private var easyFast = "5:45"
     @State private var easySlow = "6:30"
@@ -21,13 +21,6 @@ struct ContentView: View {
         "7:00", "7:05", "7:10", "7:15", "7:20", "7:25", "7:30"
     ]
 
-    private var watchReady: Bool {
-        if #available(iOS 17.0, *) {
-            return WorkoutScheduler.isSupported
-        }
-        return false
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -37,12 +30,10 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         header
                         uploadCard
+                        recognizedEditor
                         paceCard
-                        deviceCard
-                        actionButton
+                        slideAction
                         privacyFooter
-                        previewCard
-                        ocrDisclosure
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 24)
@@ -55,79 +46,142 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("不逃跑计划")
-                .font(.system(size: 38, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
+            HStack(spacing: 8) {
+                Text("不逃跑计划")
+                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                GradientSymbol(systemName: "figure.run")
+                    .frame(width: 34, height: 34)
+            }
             Text("Runna → Apple Watch")
                 .font(.title3.weight(.medium))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 10)
+        .padding(.bottom, 8)
     }
 
     private var uploadCard: some View {
-        LightCard {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("上传 Runna 截图")
-                        .font(.title2.bold())
-                    Text("上传后会自动识别并创建训练")
-                        .font(.callout)
+        PhotosPicker(selection: $selectedItem, matching: .images) {
+            HStack(spacing: 16) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.purple.opacity(0.11))
+                    Image(systemName: selectedImage == nil ? "photo.on.rectangle.angled" : "checkmark.circle.fill")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(selectedImage == nil ? .purple : .green)
+                }
+                .frame(width: 58, height: 58)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(selectedImage == nil ? "上传 Runna 截图" : "截图已上传")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text(selectedImage == nil ? "支持长截图" : "重新上传或直接编辑识别内容")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
-                PhotosPicker(selection: $selectedItem, matching: .images) {
-                    VStack(spacing: 14) {
-                        UploadIcon()
-                            .frame(width: 78, height: 78)
-                        Text(selectedImage == nil ? "上传图片" : "重新上传")
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color(.systemGray3))
+            }
+            .padding(18)
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color(.systemGray6), lineWidth: 1))
+            .shadow(color: .black.opacity(0.055), radius: 18, x: 0, y: 10)
+        }
+        .buttonStyle(.plain)
+        .onChange(of: selectedItem) { _, newItem in
+            Task { await loadAndRecognizeImage(from: newItem) }
+        }
+    }
+
+    private var recognizedEditor: some View {
+        LightCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    HStack(spacing: 10) {
+                        Text(ocrText.isEmpty ? "训练内容" : "已识别训练计划")
                             .font(.title3.bold())
-                            .foregroundStyle(.primary)
-                        Text("支持长截图")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                        if !ocrText.isEmpty {
+                            Text("可编辑")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.purple)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.purple.opacity(0.10), in: Capsule())
+                        }
                     }
-                    .frame(maxWidth: .infinity, minHeight: 245)
-                    .background(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .stroke(Color(.systemGray4), style: StrokeStyle(lineWidth: 1.4, dash: [7, 7]))
-                    )
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                }
-                .onChange(of: selectedItem) { _, newItem in
-                    Task { await loadImage(from: newItem) }
+                    Spacer()
+                    if !ocrText.isEmpty {
+                        Button("清空") {
+                            ocrText = ""
+                            workout = nil
+                            status = "已清空识别内容。"
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.purple)
+                    }
                 }
 
-                if let selectedImage {
-                    Image(uiImage: selectedImage)
-                        .resizable()
-                        .scaledToFit()
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .frame(maxHeight: 240)
-                        .frame(maxWidth: .infinity)
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $ocrText)
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 210)
+                        .padding(12)
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(.systemGray5), lineWidth: 1))
+                        .onChange(of: ocrText) { _, newValue in
+                            guard !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                            workout = RunnaTextParser.parse(text: newValue, easyFast: easyFast, easySlow: easySlow)
+                        }
+
+                    if ocrText.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("上传截图后，识别出的训练文字会出现在这里。")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Text("识别有误可以直接改，滑动按钮时会按这里的内容创建训练。")
+                                .font(.caption)
+                                .foregroundStyle(Color(.systemGray2))
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 18)
+                        .allowsHitTesting(false)
+                    }
                 }
+
+                HStack(spacing: 8) {
+                    Image(systemName: "lightbulb")
+                    Text(ocrText.isEmpty ? status : "识别有误？直接修改上方内容。")
+                    Spacer()
+                    if !ocrText.isEmpty {
+                        Text("\(ocrText.count)/5000")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
     }
 
     private var paceCard: some View {
         LightCard {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .center) {
                     HStack(spacing: 10) {
-                        GradientSymbol(systemName: "figure.run")
-                        Text("配速设置")
+                        GradientSymbol(systemName: "waveform.path.ecg")
+                        Text("Easy Pace 配速范围")
                             .font(.title3.bold())
                     }
                     Spacer()
-                    Text("Easy Pace")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.blue)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color.blue.opacity(0.10), in: Capsule())
+                    Text("推荐 5:30 – 6:30 /km")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.purple)
                 }
 
                 HStack(alignment: .center, spacing: 14) {
@@ -135,15 +189,9 @@ struct ContentView: View {
                     Text("–")
                         .font(.title.bold())
                         .foregroundStyle(.secondary)
-                        .padding(.top, 32)
+                        .padding(.top, 30)
                     paceWheel(title: "最慢配速", selection: $easySlow)
                 }
-
-                Text("设置 easy 配速范围，App 会根据这个范围生成训练计划。")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, 4)
             }
         }
     }
@@ -157,13 +205,13 @@ struct ContentView: View {
             Picker(title, selection: selection) {
                 ForEach(paceOptions, id: \.self) { pace in
                     Text(pace)
-                        .font(.system(size: 24, weight: .semibold, design: .rounded))
+                        .font(.system(size: 23, weight: .semibold, design: .rounded))
                         .tag(pace)
                 }
             }
             .pickerStyle(.wheel)
             .frame(maxWidth: .infinity)
-            .frame(height: 150)
+            .frame(height: 140)
             .clipped()
 
             Text("/ km")
@@ -173,206 +221,68 @@ struct ContentView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var deviceCard: some View {
-        LightCard {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("设备状态")
-                    .font(.title3.bold())
-
-                VStack(spacing: 0) {
-                    deviceRow(
-                        icon: "applewatch",
-                        iconColor: .blue,
-                        title: "Apple Watch",
-                        status: watchReady ? "已就绪" : "未检测到",
-                        statusColor: watchReady ? .green : .orange,
-                        trailing: watchReady ? "checkmark" : "exclamationmark"
-                    )
-
-                    Divider()
-                        .padding(.leading, 72)
-
-                    deviceRow(
-                        icon: "heart.fill",
-                        iconColor: .red,
-                        title: "WorkoutKit",
-                        status: isWorking || workout != nil ? "已授权" : "待授权",
-                        statusColor: isWorking || workout != nil ? .green : .orange,
-                        trailing: "chevron.right"
-                    )
-                }
-            }
+    private var slideAction: some View {
+        SlideToCreateButton(
+            title: "可冲",
+            subtitle: "向右滑动创建并发送到 Apple Watch",
+            disabled: isWorking || ocrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            isWorking: isWorking
+        ) {
+            Task { await createFromEditedText() }
         }
-    }
-
-    private func deviceRow(icon: String, iconColor: Color, title: String, status: String, statusColor: Color, trailing: String) -> some View {
-        HStack(spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(iconColor.opacity(0.12))
-                Image(systemName: icon)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(iconColor)
-            }
-            .frame(width: 56, height: 56)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.title3.weight(.medium))
-                HStack(spacing: 7) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
-                    Text(status)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(statusColor)
-                }
-            }
-
-            Spacer()
-
-            Image(systemName: trailing)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(trailing == "checkmark" ? .green : Color(.systemGray3))
-                .frame(width: 36, height: 36)
-                .background(trailing == "checkmark" ? Color.green.opacity(0.12) : .clear, in: Circle())
-        }
-        .padding(.vertical, 12)
-    }
-
-    private var actionButton: some View {
-        Button {
-            Task { await recognizeBuildAndSchedule() }
-        } label: {
-            HStack(spacing: 14) {
-                if isWorking {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Image(systemName: "bolt.fill")
-                        .font(.title3.bold())
-                }
-                Text(isWorking ? "创建中..." : "创建并发送到 Apple Watch")
-                    .font(.headline.bold())
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.headline.bold())
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
-            .frame(maxWidth: .infinity)
-            .background(
-                LinearGradient(
-                    colors: selectedImage == nil || isWorking ? [Color(.systemGray3), Color(.systemGray2)] : [.black, Color(red: 0.10, green: 0.13, blue: 0.17)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-            )
-            .shadow(color: .black.opacity(selectedImage == nil ? 0.08 : 0.22), radius: 18, x: 0, y: 10)
-        }
-        .disabled(selectedImage == nil || isWorking)
-        .buttonStyle(.plain)
     }
 
     private var privacyFooter: some View {
-        Label("所有数据在本地处理，保护你的隐私", systemImage: "lock.fill")
+        Label("所有数据仅在本地处理，保护你的隐私", systemImage: "lock.fill")
             .font(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 2)
     }
 
-    @ViewBuilder
-    private var previewCard: some View {
-        if let workout {
-            LightCard {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("训练预览")
-                        .font(.title3.bold())
-                    Text(workout.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(workout.steps) { step in
-                            if step.type == .repeat {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(step.summary)
-                                        .font(.headline)
-                                    ForEach(step.steps ?? []) { child in
-                                        Text(child.summary)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                            .padding(.leading, 14)
-                                    }
-                                }
-                            } else {
-                                Text(step.summary)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var ocrDisclosure: some View {
-        if !ocrText.isEmpty {
-            DisclosureGroup {
-                TextEditor(text: $ocrText)
-                    .font(.system(.caption, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 120)
-                    .padding(10)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            } label: {
-                Label("识别文本", systemImage: "text.viewfinder")
-                    .font(.headline)
-            }
-            .padding(16)
-            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color(.systemGray5), lineWidth: 1))
-        }
-    }
-
-    private func loadImage(from item: PhotosPickerItem?) async {
+    private func loadAndRecognizeImage(from item: PhotosPickerItem?) async {
         guard let item else { return }
         do {
-            if let data = try await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
-                await MainActor.run {
-                    selectedImage = image
-                    ocrText = ""
-                    workout = nil
-                    status = "截图已就位。"
-                }
+            await MainActor.run {
+                isWorking = true
+                status = "读取截图中..."
+            }
+            defer { Task { @MainActor in isWorking = false } }
+
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                throw NSError(domain: "RunnaWatchBridge", code: 10, userInfo: [NSLocalizedDescriptionKey: "图片读取失败"])
+            }
+
+            let text = try await VisionOCR.recognize(image: image)
+            let parsed = RunnaTextParser.parse(text: text, easyFast: easyFast, easySlow: easySlow)
+            await MainActor.run {
+                selectedImage = image
+                ocrText = text
+                workout = parsed
+                status = "截图已识别。"
             }
         } catch {
-            await MainActor.run { status = "同步失败：读图失败：\(error.localizedDescription)" }
+            await MainActor.run { status = "识别失败：\(error.localizedDescription)" }
         }
     }
 
-    private func recognizeBuildAndSchedule() async {
-        guard let image = selectedImage else { return }
+    private func createFromEditedText() async {
+        let text = ocrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
         await MainActor.run {
             isWorking = true
-            status = "识别训练中..."
+            status = "创建训练中..."
         }
         defer { Task { @MainActor in isWorking = false } }
 
         do {
-            let text = try await VisionOCR.recognize(image: image)
             let parsed = RunnaTextParser.parse(text: text, easyFast: easyFast, easySlow: easySlow)
             let custom = try WorkoutKitBuilder.build(from: parsed)
             let plan = WorkoutPlan(.custom(custom))
             try await schedule(plan: plan)
             await MainActor.run {
-                ocrText = text
                 workout = parsed
                 status = "同步完成。要活着回来啊。"
             }
@@ -409,27 +319,11 @@ private struct LightCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) { content }
-            .padding(22)
+            .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color(.systemGray6), lineWidth: 1))
             .shadow(color: .black.opacity(0.055), radius: 20, x: 0, y: 10)
-    }
-}
-
-private struct UploadIcon: View {
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(colors: [.blue.opacity(0.75), .cyan.opacity(0.55), .purple.opacity(0.45)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                )
-                .blur(radius: 0.2)
-            Image(systemName: "icloud.and.arrow.up.fill")
-                .font(.system(size: 38, weight: .bold))
-                .foregroundStyle(.white)
-        }
-        .shadow(color: .blue.opacity(0.28), radius: 14, x: 0, y: 8)
     }
 }
 
@@ -442,7 +336,99 @@ private struct GradientSymbol: View {
             .foregroundStyle(
                 LinearGradient(colors: [.mint, .blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
             )
-            .frame(width: 34, height: 34)
+    }
+}
+
+private struct SlideToCreateButton: View {
+    let title: String
+    let subtitle: String
+    let disabled: Bool
+    let isWorking: Bool
+    let action: () -> Void
+
+    @State private var dragOffset: CGFloat = 0
+    @State private var didTrigger = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let knobSize: CGFloat = 68
+            let maxOffset = max(0, geo.size.width - knobSize - 10)
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: disabled ? [Color(.systemGray3), Color(.systemGray2)] : [Color.blue, Color.purple],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: disabled ? .clear : .purple.opacity(0.25), radius: 18, x: 0, y: 10)
+
+                HStack(spacing: 12) {
+                    Spacer().frame(width: knobSize + 18)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.title2.bold())
+                        Text(subtitle)
+                            .font(.caption.weight(.medium))
+                            .opacity(0.82)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right.2")
+                        .font(.headline.bold())
+                        .opacity(0.45)
+                        .padding(.trailing, 22)
+                }
+                .foregroundStyle(.white)
+
+                Circle()
+                    .fill(.white)
+                    .frame(width: knobSize, height: knobSize)
+                    .overlay(
+                        Group {
+                            if isWorking {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "arrow.right")
+                                    .font(.title2.bold())
+                                    .foregroundStyle(disabled ? Color(.systemGray2) : .purple)
+                            }
+                        }
+                    )
+                    .padding(.leading, 5)
+                    .offset(x: dragOffset)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                guard !disabled, !isWorking else { return }
+                                dragOffset = min(max(0, value.translation.width), maxOffset)
+                            }
+                            .onEnded { _ in
+                                guard !disabled, !isWorking else { return }
+                                if dragOffset > maxOffset * 0.72, !didTrigger {
+                                    didTrigger = true
+                                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                                        dragOffset = maxOffset
+                                    }
+                                    action()
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                            dragOffset = 0
+                                            didTrigger = false
+                                        }
+                                    }
+                                } else {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        dragOffset = 0
+                                    }
+                                }
+                            }
+                    )
+            }
+        }
+        .frame(height: 78)
+        .opacity(disabled ? 0.72 : 1)
     }
 }
 
