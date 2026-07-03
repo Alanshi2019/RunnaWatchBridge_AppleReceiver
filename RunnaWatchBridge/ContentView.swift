@@ -7,6 +7,7 @@ import UIKit
 struct ContentView: View {
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
+    @State private var uploadedFileName = "runna_screenshot.png"
     @State private var ocrText: String = ""
     @State private var workout: RunnaWorkout?
     @State private var status: String = "上传 Runna 截图开始。"
@@ -21,6 +22,10 @@ struct ContentView: View {
         "7:00", "7:05", "7:10", "7:15", "7:20", "7:25", "7:30"
     ]
 
+    private var recognizedStepCount: Int {
+        countSteps(workout?.steps ?? [])
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -30,10 +35,13 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         header
                         uploadCard
-                        recognizedEditor
+                        if workout != nil {
+                            recognizedStepsCard
+                        }
                         paceCard
                         slideAction
                         privacyFooter
+                        ocrDisclosure
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 24)
@@ -65,7 +73,7 @@ struct ContentView: View {
             HStack(spacing: 16) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color.purple.opacity(0.11))
+                        .fill(selectedImage == nil ? Color.purple.opacity(0.11) : Color.blue.opacity(0.10))
                     Image(systemName: selectedImage == nil ? "photo.on.rectangle.angled" : "checkmark.circle.fill")
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(selectedImage == nil ? .purple : .green)
@@ -73,19 +81,23 @@ struct ContentView: View {
                 .frame(width: 58, height: 58)
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(selectedImage == nil ? "上传 Runna 截图" : "截图已上传")
+                    Text(selectedImage == nil ? "上传 Runna 截图" : uploadedFileName)
                         .font(.headline)
                         .foregroundStyle(.primary)
-                    Text(selectedImage == nil ? "支持长截图" : "重新上传或直接编辑识别内容")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text(selectedImage == nil ? "支持长截图" : "✓ \(recognizedStepCount) steps recognised")
+                        .font(.subheadline.weight(selectedImage == nil ? .regular : .semibold))
+                        .foregroundStyle(selectedImage == nil ? .secondary : .green)
                 }
 
                 Spacer()
 
-                Image(systemName: "chevron.right")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color(.systemGray3))
+                Text(selectedImage == nil ? "选择" : "Replace")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(selectedImage == nil ? .purple : .primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Color(.secondarySystemGroupedBackground), in: Capsule())
             }
             .padding(18)
             .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -98,73 +110,63 @@ struct ContentView: View {
         }
     }
 
-    private var recognizedEditor: some View {
+    private var recognizedStepsCard: some View {
         LightCard {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    HStack(spacing: 10) {
-                        Text(ocrText.isEmpty ? "训练内容" : "已识别训练计划")
-                            .font(.title3.bold())
-                        if !ocrText.isEmpty {
-                            Text("可编辑")
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 10) {
+                            Text("Workout Steps")
+                                .font(.title3.bold())
+                            Text("\(recognizedStepCount) steps")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.purple)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
                                 .background(Color.purple.opacity(0.10), in: Capsule())
                         }
+                        Text(status)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+
                     Spacer()
-                    if !ocrText.isEmpty {
-                        Button("清空") {
-                            ocrText = ""
-                            workout = nil
-                            status = "已清空识别内容。"
+
+                    Button {
+                        // 编辑弹窗会在下一步加，这里先保留入口。
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.headline)
+                            .foregroundStyle(.purple)
+                            .frame(width: 38, height: 38)
+                            .background(Color.purple.opacity(0.10), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                VStack(spacing: 12) {
+                    ForEach(Array((workout?.steps ?? []).enumerated()), id: \.element.id) { index, step in
+                        StepCard(step: step, index: index) {
+                            deleteStep(at: index)
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.purple)
                     }
                 }
 
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $ocrText)
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundStyle(.primary)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 210)
-                        .padding(12)
-                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(.systemGray5), lineWidth: 1))
-                        .onChange(of: ocrText) { _, newValue in
-                            guard !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                            workout = RunnaTextParser.parse(text: newValue, easyFast: easyFast, easySlow: easySlow)
-                        }
-
-                    if ocrText.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("上传截图后，识别出的训练文字会出现在这里。")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                            Text("识别有误可以直接改，滑动按钮时会按这里的内容创建训练。")
-                                .font(.caption)
-                                .foregroundStyle(Color(.systemGray2))
-                        }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 18)
-                        .allowsHitTesting(false)
+                Button {
+                    // Add Step 会在第二步做。
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                        Text("Add step")
                     }
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(.systemGray5), style: StrokeStyle(lineWidth: 1, dash: [5, 5])))
                 }
-
-                HStack(spacing: 8) {
-                    Image(systemName: "lightbulb")
-                    Text(ocrText.isEmpty ? status : "识别有误？直接修改上方内容。")
-                    Spacer()
-                    if !ocrText.isEmpty {
-                        Text("\(ocrText.count)/5000")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
             }
         }
     }
@@ -175,22 +177,29 @@ struct ContentView: View {
                 HStack(alignment: .center) {
                     HStack(spacing: 10) {
                         GradientSymbol(systemName: "waveform.path.ecg")
-                        Text("Easy Pace 配速范围")
+                        Text("Easy Pace Zone")
                             .font(.title3.bold())
                     }
                     Spacer()
-                    Text("推荐 5:30 – 6:30 /km")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.purple)
+                    Text("Easy")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.green, in: Capsule())
                 }
 
+                Text("Applied to easy / warmup / cooldown steps")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
                 HStack(alignment: .center, spacing: 14) {
-                    paceWheel(title: "最快配速", selection: $easyFast)
+                    paceWheel(title: "MIN", selection: $easyFast)
                     Text("–")
                         .font(.title.bold())
                         .foregroundStyle(.secondary)
                         .padding(.top, 30)
-                    paceWheel(title: "最慢配速", selection: $easySlow)
+                    paceWheel(title: "MAX", selection: $easySlow)
                 }
             }
         }
@@ -199,7 +208,7 @@ struct ContentView: View {
     private func paceWheel(title: String, selection: Binding<String>) -> some View {
         VStack(spacing: 8) {
             Text(title)
-                .font(.subheadline.weight(.medium))
+                .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
 
             Picker(title, selection: selection) {
@@ -211,7 +220,7 @@ struct ContentView: View {
             }
             .pickerStyle(.wheel)
             .frame(maxWidth: .infinity)
-            .frame(height: 140)
+            .frame(height: 132)
             .clipped()
 
             Text("/ km")
@@ -225,10 +234,10 @@ struct ContentView: View {
         SlideToCreateButton(
             title: "可冲",
             subtitle: "向右滑动创建并发送到 Apple Watch",
-            disabled: isWorking || ocrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            disabled: isWorking || workout == nil,
             isWorking: isWorking
         ) {
-            Task { await createFromEditedText() }
+            Task { await createFromCurrentPlan() }
         }
     }
 
@@ -238,6 +247,46 @@ struct ContentView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private var ocrDisclosure: some View {
+        if !ocrText.isEmpty {
+            DisclosureGroup {
+                TextEditor(text: $ocrText)
+                    .font(.system(.caption, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 110)
+                    .padding(10)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .onChange(of: ocrText) { _, newValue in
+                        guard !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                        workout = RunnaTextParser.parse(text: newValue, easyFast: easyFast, easySlow: easySlow)
+                    }
+            } label: {
+                Label("Raw OCR text", systemImage: "text.viewfinder")
+                    .font(.headline)
+            }
+            .padding(16)
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color(.systemGray5), lineWidth: 1))
+        }
+    }
+
+    private func deleteStep(at index: Int) {
+        guard var current = workout, current.steps.indices.contains(index) else { return }
+        current.steps.remove(at: index)
+        workout = current
+        status = "已删除 1 个 step。"
+    }
+
+    private func countSteps(_ steps: [RunnaStep]) -> Int {
+        steps.reduce(0) { total, step in
+            if step.type == .repeat {
+                return total + 1 + countSteps(step.steps ?? [])
+            }
+            return total + 1
+        }
     }
 
     private func loadAndRecognizeImage(from item: PhotosPickerItem?) async {
@@ -258,18 +307,18 @@ struct ContentView: View {
             let parsed = RunnaTextParser.parse(text: text, easyFast: easyFast, easySlow: easySlow)
             await MainActor.run {
                 selectedImage = image
+                uploadedFileName = "runna_screenshot.png"
                 ocrText = text
                 workout = parsed
-                status = "截图已识别。"
+                status = "✓ \(countSteps(parsed.steps)) steps recognised"
             }
         } catch {
             await MainActor.run { status = "识别失败：\(error.localizedDescription)" }
         }
     }
 
-    private func createFromEditedText() async {
-        let text = ocrText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+    private func createFromCurrentPlan() async {
+        guard let current = workout else { return }
 
         await MainActor.run {
             isWorking = true
@@ -278,12 +327,10 @@ struct ContentView: View {
         defer { Task { @MainActor in isWorking = false } }
 
         do {
-            let parsed = RunnaTextParser.parse(text: text, easyFast: easyFast, easySlow: easySlow)
-            let custom = try WorkoutKitBuilder.build(from: parsed)
+            let custom = try WorkoutKitBuilder.build(from: current)
             let plan = WorkoutPlan(.custom(custom))
             try await schedule(plan: plan)
             await MainActor.run {
-                workout = parsed
                 status = "同步完成。要活着回来啊。"
             }
         } catch {
@@ -311,6 +358,98 @@ struct ContentView: View {
         } else {
             throw NSError(domain: "RunnaWatchBridge", code: 3, userInfo: [NSLocalizedDescriptionKey: "Requires iOS 17+"])
         }
+    }
+}
+
+private struct StepCard: View {
+    let step: RunnaStep
+    let index: Int
+    let onDelete: () -> Void
+
+    private var accent: Color {
+        switch step.type {
+        case .warmup: return .orange
+        case .cooldown: return .red
+        case .recovery: return .cyan
+        case .repeat: return .purple
+        case .run: return .green
+        }
+    }
+
+    private var typeTitle: String {
+        switch step.type {
+        case .warmup: return "Warm-up"
+        case .cooldown: return "Cool-down"
+        case .recovery: return "Recovery"
+        case .repeat: return "Interval"
+        case .run: return "Easy"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(accent)
+                .frame(width: 4)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(typeTitle.uppercased())
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(accent.opacity(0.12), in: Capsule())
+                    if step.type == .repeat, let iterations = step.iterations {
+                        Text("×\(iterations)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color(.tertiarySystemGroupedBackground), in: Capsule())
+                    }
+                    Spacer()
+                }
+
+                Text(step.summary)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                if step.type == .repeat, let children = step.steps, !children.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(children.prefix(3)) { child in
+                            Text(child.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 10) {
+                Button {} label: {
+                    Image(systemName: "pencil")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 38, height: 38)
+                        .background(Color(.secondarySystemGroupedBackground), in: Circle())
+                }
+                .buttonStyle(.plain)
+
+                Button(role: .destructive) { onDelete() } label: {
+                    Image(systemName: "trash")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.red)
+                        .frame(width: 38, height: 38)
+                        .background(Color.red.opacity(0.08), in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
