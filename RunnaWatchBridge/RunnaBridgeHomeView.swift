@@ -12,6 +12,9 @@ struct RunnaBridgeHomeView: View {
     @State private var status = "上传 Runna 截图开始。"
     @State private var easyFast = "5:45"
     @State private var easySlow = "6:30"
+    @State private var editingIndex: Int?
+    @State private var draftStep = EditableStep()
+    @State private var showEditor = false
     @State private var showResultAlert = false
     @State private var resultTitle = ""
     @State private var resultMessage = ""
@@ -21,8 +24,9 @@ struct RunnaBridgeHomeView: View {
         let seconds = totalSeconds % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
-    
+
     private var stepCount: Int { countSteps(workout?.steps ?? []) }
+    private var easyAffectedCount: Int { countEasyAffected(workout?.steps ?? []) }
 
     var body: some View {
         NavigationStack {
@@ -44,6 +48,13 @@ struct RunnaBridgeHomeView: View {
                     .padding(.top, 24)
                     .padding(.bottom, 36)
                 }
+            }
+            .sheet(isPresented: $showEditor) {
+                StepEditorView(draft: $draftStep) {
+                    saveDraftStep()
+                    showEditor = false
+                }
+                .presentationDetents([.large])
             }
             .alert(resultTitle, isPresented: $showResultAlert) {
                 Button("OK", role: .cancel) {}
@@ -97,7 +108,11 @@ struct RunnaBridgeHomeView: View {
                 }
 
                 ForEach(Array(workout.steps.enumerated()), id: \.element.id) { index, step in
-                    StepCard(step: step) {} onDelete: { deleteStep(at: index) }
+                    StepCard(step: step) {
+                        startEditing(step, at: index)
+                    } onDelete: {
+                        deleteStep(at: index)
+                    }
                 }
 
                 Button(action: addStep) {
@@ -117,8 +132,13 @@ struct RunnaBridgeHomeView: View {
         LightCard {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    Text("Easy Pace Zone")
-                        .font(.title3.bold())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Easy Pace Zone")
+                            .font(.title3.bold())
+                        Text("Applied to \(easyAffectedCount) easy / warmup / cooldown steps")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer()
                     Text("Easy")
                         .font(.caption.weight(.bold))
@@ -134,6 +154,8 @@ struct RunnaBridgeHomeView: View {
                 }
             }
         }
+        .onChange(of: easyFast) { _, _ in applyEasyPaceToWorkout() }
+        .onChange(of: easySlow) { _, _ in applyEasyPaceToWorkout() }
     }
 
     private func paceWheel(_ title: String, selection: Binding<String>) -> some View {
@@ -145,7 +167,7 @@ struct RunnaBridgeHomeView: View {
             .pickerStyle(.wheel)
             .frame(height: 120)
             .clipped()
-            Text("km/h").font(.caption).foregroundStyle(.secondary)
+            Text("/ km").font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -197,16 +219,66 @@ struct RunnaBridgeHomeView: View {
         }
     }
 
+    private func startEditing(_ step: RunnaStep, at index: Int) {
+        editingIndex = index
+        draftStep = EditableStep(step: step)
+        showEditor = true
+    }
+
+    private func saveDraftStep() {
+        guard var current = workout, let index = editingIndex, current.steps.indices.contains(index) else { return }
+        current.steps[index] = draftStep.toRunnaStep()
+        workout = current
+        status = "已更新 step。"
+    }
+
     private func addStep() {
         var current = workout ?? RunnaWorkout(name: "Runna Custom", scheduledDate: nil, steps: [])
-        current.steps.append(RunnaStep(type: .run, distanceMeters: 400, paceMin: easyFast, paceMax: easySlow))
+        let step = RunnaStep(type: .run, distanceMeters: 400, paceMin: easyFast, paceMax: easySlow)
+        current.steps.append(step)
         workout = current
+        startEditing(step, at: current.steps.count - 1)
     }
 
     private func deleteStep(at index: Int) {
         guard var current = workout, current.steps.indices.contains(index) else { return }
         current.steps.remove(at: index)
         workout = current
+        status = "已删除 step。"
+    }
+
+    private func applyEasyPaceToWorkout() {
+        guard var current = workout else { return }
+        current.steps = current.steps.map { applyEasyPace(to: $0) }
+        workout = current
+        status = "Easy pace 已应用到 \(easyAffectedCount) 个 easy step。"
+    }
+
+    private func applyEasyPace(to step: RunnaStep) -> RunnaStep {
+        var updated = step
+        if isEasyStep(step) {
+            updated.paceMin = easyFast
+            updated.paceMax = easySlow
+        }
+        if let children = step.steps {
+            updated.steps = children.map { applyEasyPace(to: $0) }
+        }
+        return updated
+    }
+
+    private func isEasyStep(_ step: RunnaStep) -> Bool {
+        if step.type == .warmup || step.type == .cooldown { return true }
+        if step.type != .run { return false }
+        if step.paceMin == nil && step.paceMax == nil { return true }
+        return step.paceMin != step.paceMax
+    }
+
+    private func countEasyAffected(_ steps: [RunnaStep]) -> Int {
+        steps.reduce(0) { total, step in
+            var count = total + (isEasyStep(step) ? 1 : 0)
+            if let children = step.steps { count += countEasyAffected(children) }
+            return count
+        }
     }
 
     private func countSteps(_ steps: [RunnaStep]) -> Int {
