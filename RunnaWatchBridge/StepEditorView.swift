@@ -36,7 +36,16 @@ struct EditableStep {
 
 struct StepEditorView: View {
     @Binding var draft: EditableStep
+    let easyFast: String
+    let easySlow: String
     let onSave: () -> Void
+
+    private var isPaceControlledByEasyZone: Bool {
+        if draft.type == .warmup || draft.type == .cooldown { return true }
+        guard draft.type == .run else { return false }
+        if draft.paceMin.isEmpty && draft.paceMax.isEmpty { return true }
+        return draft.paceMin != draft.paceMax
+    }
 
     var body: some View {
         NavigationStack {
@@ -64,10 +73,17 @@ struct StepEditorView: View {
                         TextField("Duration seconds", text: $draft.durationSeconds)
                             .keyboardType(.decimalPad)
                     }
-                    TextField("Pace min", text: $draft.paceMin)
+                    TextField("Pace min", text: paceMinBinding)
                         .keyboardType(.numbersAndPunctuation)
-                    TextField("Pace max", text: $draft.paceMax)
+                        .disabled(isPaceControlledByEasyZone)
+                    TextField("Pace max", text: paceMaxBinding)
                         .keyboardType(.numbersAndPunctuation)
+                        .disabled(isPaceControlledByEasyZone)
+                    if isPaceControlledByEasyZone {
+                        Text("Controlled by Easy Pace Zone")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("Edit Step")
@@ -78,5 +94,19 @@ struct StepEditorView: View {
                 }
             }
         }
+    }
+
+    private var paceMinBinding: Binding<String> {
+        Binding(
+            get: { isPaceControlledByEasyZone ? easyFast : draft.paceMin },
+            set: { draft.paceMin = $0 }
+        )
+    }
+
+    private var paceMaxBinding: Binding<String> {
+        Binding(
+            get: { isPaceControlledByEasyZone ? easySlow : draft.paceMax },
+            set: { draft.paceMax = $0 }
+        )
     }
 }
