@@ -135,7 +135,7 @@ struct RunnaBridgeHomeView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Easy Pace Zone")
                             .font(.title3.bold())
-                        Text("Applied to \(easyAffectedCount) easy / warmup / cooldown steps")
+                        Text("Applied to \(easyAffectedCount) conversation / warmup / cooldown steps")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -235,7 +235,7 @@ struct RunnaBridgeHomeView: View {
 
     private func addStep() {
         var current = workout ?? RunnaWorkout(name: "Runna Custom", scheduledDate: nil, steps: [])
-        let step = RunnaStep(type: .run, distanceMeters: 400, paceMin: easyFast, paceMax: easySlow)
+        let step = RunnaStep(type: .run, distanceMeters: 400, paceMin: "5:00", paceMax: "5:00", isEasyControlled: false)
         current.steps.append(step)
         workout = current
         startEditing(step, at: current.steps.count - 1)
@@ -253,7 +253,7 @@ struct RunnaBridgeHomeView: View {
         current.steps = current.steps.map { applyEasyPace(to: $0) }
         workout = current
         if updateStatus {
-            status = "Easy pace 已应用到 \(countEasyAffected(current.steps)) 个 easy step。"
+            status = "Easy pace 已应用到 \(countEasyAffected(current.steps)) 个 controlled step。"
         }
     }
 
@@ -270,10 +270,7 @@ struct RunnaBridgeHomeView: View {
     }
 
     private func isEasyStep(_ step: RunnaStep) -> Bool {
-        if step.type == .warmup || step.type == .cooldown { return true }
-        if step.type != .run { return false }
-        if step.paceMin == nil && step.paceMax == nil { return true }
-        return step.paceMin != step.paceMax
+        step.usesEasyPaceZone
     }
 
     private func resetToInitialState() {
