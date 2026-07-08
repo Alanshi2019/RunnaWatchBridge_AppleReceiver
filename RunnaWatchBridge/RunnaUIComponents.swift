@@ -55,6 +55,8 @@ struct StepCard: View {
     let step: RunnaStep
     let onEdit: () -> Void
     let onDelete: () -> Void
+    let onEditChild: (Int) -> Void
+    let onDeleteChild: (Int) -> Void
 
     private var accent: Color {
         switch step.type {
@@ -110,11 +112,13 @@ struct StepCard: View {
                 }
 
                 if step.type == .repeat, let children = step.steps, !children.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(children.prefix(3)) { child in
-                            Text(child.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                            RepeatChildRow(step: child) {
+                                onEditChild(index)
+                            } onDelete: {
+                                onDeleteChild(index)
+                            }
                         }
                     }
                 }
@@ -146,6 +150,38 @@ struct StepCard: View {
         }
         .padding(14)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private struct RepeatChildRow: View {
+    let step: RunnaStep
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(step.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            if !step.usesEasyPaceZone {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
