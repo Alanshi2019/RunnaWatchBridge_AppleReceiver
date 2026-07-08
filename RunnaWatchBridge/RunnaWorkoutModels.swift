@@ -15,9 +15,10 @@ struct RunnaStep: Codable, Identifiable {
     var paceMax: String?
     var iterations: Int?
     var steps: [RunnaStep]?
+    var isEasyControlled: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case type, distanceMeters, durationSeconds, paceMin, paceMax, iterations, steps
+        case type, distanceMeters, durationSeconds, paceMin, paceMax, iterations, steps, isEasyControlled
     }
 }
 
@@ -39,6 +40,10 @@ enum RunnaJSON {
 }
 
 extension RunnaStep {
+    var usesEasyPaceZone: Bool {
+        isEasyControlled == true || type == .warmup || type == .cooldown
+    }
+
     var summary: String {
         switch type {
         case .repeat:
