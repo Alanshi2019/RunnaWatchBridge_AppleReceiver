@@ -37,7 +37,7 @@ struct RunnaBridgeHomeView: View {
                         header
                         uploadCard
                         if let workout { stepsCard(workout) }
-                        paceCard
+                        if workout != nil { paceCard }
                         slideAction
                         Label("所有数据仅在本地处理，保护你的隐私", systemImage: "lock.fill")
                             .font(.caption)
@@ -50,7 +50,7 @@ struct RunnaBridgeHomeView: View {
                 }
             }
             .sheet(isPresented: $showEditor) {
-                StepEditorView(draft: $draftStep) {
+                StepEditorView(draft: $draftStep, easyFast: easyFast, easySlow: easySlow) {
                     saveDraftStep()
                     showEditor = false
                 }
@@ -189,6 +189,7 @@ struct RunnaBridgeHomeView: View {
                 selectedImage = image
                 ocrText = text
                 workout = parsed
+                applyEasyPaceToWorkout(updateStatus: false)
                 status = "✓ \(countSteps(parsed.steps)) steps recognised"
             }
         } catch {
@@ -204,7 +205,7 @@ struct RunnaBridgeHomeView: View {
             let plan = WorkoutPlan(.custom(try WorkoutKitBuilder.build(from: current)))
             try await schedule(plan: plan)
             await MainActor.run {
-                status = "同步完成。"
+                resetToInitialState()
                 resultTitle = "已发送到 Apple Watch"
                 resultMessage = "训练已经创建完成，可以在 Apple Watch Workout app 里查看。"
                 showResultAlert = true
@@ -227,7 +228,7 @@ struct RunnaBridgeHomeView: View {
 
     private func saveDraftStep() {
         guard var current = workout, let index = editingIndex, current.steps.indices.contains(index) else { return }
-        current.steps[index] = draftStep.toRunnaStep()
+        current.steps[index] = applyEasyPace(to: draftStep.toRunnaStep())
         workout = current
         status = "已更新 step。"
     }
@@ -247,11 +248,13 @@ struct RunnaBridgeHomeView: View {
         status = "已删除 step。"
     }
 
-    private func applyEasyPaceToWorkout() {
+    private func applyEasyPaceToWorkout(updateStatus: Bool = true) {
         guard var current = workout else { return }
         current.steps = current.steps.map { applyEasyPace(to: $0) }
         workout = current
-        status = "Easy pace 已应用到 \(easyAffectedCount) 个 easy step。"
+        if updateStatus {
+            status = "Easy pace 已应用到 \(countEasyAffected(current.steps)) 个 easy step。"
+        }
     }
 
     private func applyEasyPace(to step: RunnaStep) -> RunnaStep {
@@ -271,6 +274,19 @@ struct RunnaBridgeHomeView: View {
         if step.type != .run { return false }
         if step.paceMin == nil && step.paceMax == nil { return true }
         return step.paceMin != step.paceMax
+    }
+
+    private func resetToInitialState() {
+        selectedItem = nil
+        selectedImage = nil
+        ocrText = ""
+        workout = nil
+        easyFast = "5:45"
+        easySlow = "6:30"
+        editingIndex = nil
+        draftStep = EditableStep()
+        showEditor = false
+        status = "上传 Runna 截图开始。"
     }
 
     private func countEasyAffected(_ steps: [RunnaStep]) -> Int {
