@@ -81,7 +81,7 @@ enum RunnaTextParser {
             if let meters = distanceMeters(in: lower) {
                 let pace = paceString(in: lower)
                 var stepType: RunnaStepType = .run
-                if section == "warmup" { stepType = .warmup" }
+                if section == "warmup" { stepType = .warmup }
                 if section == "cooldown" { stepType = .cooldown }
 
                 let isConversationPace = containsConversationPace(lower) || pendingConversationPace
