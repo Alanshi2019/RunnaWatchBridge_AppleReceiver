@@ -72,9 +72,11 @@ enum RunnaTextParser {
             if lower.contains("cooldown") || lower.contains("cool down") { flushRepeat(); section = "cooldown"; continue }
             if lower.contains("repeat"), let n = firstInt(in: lower) { flushRepeat(); section = "set"; repeatIterations = n; continue }
             if lower == "set" || lower.contains(" set ") || lower.hasSuffix(" set") { section = "set"; continue }
+            if containsConversationPace(lower) {
+                pendingConversationPace = true
+            }
             if let pace = paceString(in: lower), lower.contains("no faster") {
                 pendingEasyPace = (pace, easySlow.isEmpty ? pace : easySlow)
-                pendingConversationPace = containsConversationPace(lower)
                 continue
             }
             if let rest = restSeconds(in: lower) { append(RunnaStep(type: .recovery, durationSeconds: Double(rest))); continue }
