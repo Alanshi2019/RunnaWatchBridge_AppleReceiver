@@ -58,8 +58,7 @@ struct StepCard: View {
 
     private var accent: Color {
         switch step.type {
-        case .warmup: return .orange
-        case .cooldown: return .red
+        case .warmup, .cooldown: return .green
         case .recovery, .rest: return .cyan
         case .repeat: return .purple
         case .run: return step.isEasyControlled == true ? .green : .blue
@@ -68,8 +67,7 @@ struct StepCard: View {
 
     private var typeTitle: String {
         switch step.type {
-        case .warmup: return "Warm-up"
-        case .cooldown: return "Cool-down"
+        case .warmup, .cooldown: return "Easy"
         case .recovery, .rest: return "Recovery"
         case .repeat: return "Interval"
         case .run: return step.isEasyControlled == true ? "Easy" : "Run"
@@ -105,6 +103,12 @@ struct StepCard: View {
                     .font(.headline)
                     .foregroundStyle(.primary)
 
+                if step.usesEasyPaceZone {
+                    Text("Controlled by Easy Pace Zone")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 if step.type == .repeat, let children = step.steps, !children.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(children.prefix(3)) { child in
@@ -119,14 +123,16 @@ struct StepCard: View {
             Spacer(minLength: 6)
 
             HStack(spacing: 10) {
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 38, height: 38)
-                        .background(Color(.secondarySystemGroupedBackground), in: Circle())
+                if !step.usesEasyPaceZone {
+                    Button(action: onEdit) {
+                        Image(systemName: "pencil")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 38, height: 38)
+                            .background(Color(.secondarySystemGroupedBackground), in: Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
