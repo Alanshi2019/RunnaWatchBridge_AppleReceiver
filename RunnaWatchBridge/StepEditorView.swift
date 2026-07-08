@@ -7,6 +7,7 @@ struct EditableStep {
     var paceMin: String = "5:45"
     var paceMax: String = "6:30"
     var iterations: String = "1"
+    var isEasyControlled: Bool = false
 
     init() {}
 
@@ -17,6 +18,7 @@ struct EditableStep {
         paceMin = step.paceMin ?? ""
         paceMax = step.paceMax ?? ""
         iterations = step.iterations.map(String.init) ?? "1"
+        isEasyControlled = step.isEasyControlled == true
     }
 
     func toRunnaStep() -> RunnaStep {
@@ -28,8 +30,9 @@ struct EditableStep {
             paceMax: paceMax.isEmpty ? nil : paceMax,
             iterations: Int(iterations),
             steps: type == .repeat ? [
-                RunnaStep(type: .run, distanceMeters: Double(distanceMeters) ?? 400, durationSeconds: nil, paceMin: paceMin.isEmpty ? nil : paceMin, paceMax: paceMax.isEmpty ? nil : paceMax, iterations: nil, steps: nil)
-            ] : nil
+                RunnaStep(type: .run, distanceMeters: Double(distanceMeters) ?? 400, durationSeconds: nil, paceMin: paceMin.isEmpty ? nil : paceMin, paceMax: paceMax.isEmpty ? nil : paceMax, iterations: nil, steps: nil, isEasyControlled: false)
+            ] : nil,
+            isEasyControlled: type == .run ? isEasyControlled : nil
         )
     }
 }
@@ -41,10 +44,7 @@ struct StepEditorView: View {
     let onSave: () -> Void
 
     private var isPaceControlledByEasyZone: Bool {
-        if draft.type == .warmup || draft.type == .cooldown { return true }
-        guard draft.type == .run else { return false }
-        if draft.paceMin.isEmpty && draft.paceMax.isEmpty { return true }
-        return draft.paceMin != draft.paceMax
+        draft.type == .warmup || draft.type == .cooldown || (draft.type == .run && draft.isEasyControlled)
     }
 
     var body: some View {
