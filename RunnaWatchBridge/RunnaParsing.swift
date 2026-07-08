@@ -43,6 +43,7 @@ enum RunnaTextParser {
         var repeatIterations: Int?
         var repeatSteps: [RunnaStep] = []
         var pendingEasyPace: (String, String)?
+        var pendingConversationPace = false
 
         func flushRepeat() {
             if let n = repeatIterations, !repeatSteps.isEmpty {
@@ -71,28 +72,36 @@ enum RunnaTextParser {
             if lower.contains("cooldown") || lower.contains("cool down") { flushRepeat(); section = "cooldown"; continue }
             if lower.contains("repeat"), let n = firstInt(in: lower) { flushRepeat(); section = "set"; repeatIterations = n; continue }
             if lower == "set" || lower.contains(" set ") || lower.hasSuffix(" set") { section = "set"; continue }
-            if let pace = paceString(in: lower), lower.contains("no faster") { pendingEasyPace = (pace, easySlow.isEmpty ? pace : easySlow); continue }
+            if let pace = paceString(in: lower), lower.contains("no faster") {
+                pendingEasyPace = (pace, easySlow.isEmpty ? pace : easySlow)
+                pendingConversationPace = containsConversationPace(lower)
+                continue
+            }
             if let rest = restSeconds(in: lower) { append(RunnaStep(type: .recovery, durationSeconds: Double(rest))); continue }
             if let meters = distanceMeters(in: lower) {
                 let pace = paceString(in: lower)
                 var stepType: RunnaStepType = .run
-                if section == "warmup" { stepType = .warmup }
+                if section == "warmup" { stepType = .warmup" }
                 if section == "cooldown" { stepType = .cooldown }
+
+                let isConversationPace = containsConversationPace(lower) || pendingConversationPace
+                let isEasyControlled = stepType == .warmup || stepType == .cooldown || (stepType == .run && isConversationPace)
 
                 let pMin: String?
                 let pMax: String?
-                if let pace {
-                    pMin = pace
-                    pMax = pace
-                } else if lower.contains("conversation") || lower.contains("conversational") || lower.contains("easy") || section == "warmup" || section == "cooldown" {
+                if isEasyControlled {
                     pMin = pendingEasyPace?.0 ?? (easyFast.isEmpty ? nil : easyFast)
                     pMax = pendingEasyPace?.1 ?? (easySlow.isEmpty ? nil : easySlow)
+                } else if let pace {
+                    pMin = pace
+                    pMax = pace
                 } else {
                     pMin = nil
                     pMax = nil
                 }
-                append(RunnaStep(type: stepType, distanceMeters: meters, paceMin: pMin, paceMax: pMax))
+                append(RunnaStep(type: stepType, distanceMeters: meters, paceMin: pMin, paceMax: pMax, isEasyControlled: isEasyControlled))
                 if section == "warmup" { section = "set" }
+                pendingConversationPace = false
             }
         }
         flushRepeat()
@@ -116,6 +125,10 @@ enum RunnaTextParser {
         ["stretches", "start workout", "athlete", "olympian", "wechat", "outdoor", "treadmill"].contains { lower.contains($0) }
     }
 
+    private static func containsConversationPace(_ lower: String) -> Bool {
+        lower.contains("conversation") || lower.contains("conversational") || lower.contains("easy run") || lower.contains("easy pace")
+    }
+
     private static func firstInt(in s: String) -> Int? { match(#"\d+"#, in: s).flatMap(Int.init) }
     private static func paceString(in s: String) -> String? { match(#"\b\d{1,2}:[0-5]\d\b"#, in: s) }
     private static func restSeconds(in s: String) -> Int? { match(#"(\d+)\s*s(?:ec|econds)?\b.*(rest|walk|walking|recovery)"#, in: s, group: 1).flatMap(Int.init) }
@@ -136,13 +149,13 @@ enum RunnaTextParser {
 
     private static func placeholderSteps(easyFast: String, easySlow: String) -> [RunnaStep] {
         [
-            RunnaStep(type: .warmup, distanceMeters: 2000, paceMin: easyFast, paceMax: easySlow),
+            RunnaStep(type: .warmup, distanceMeters: 2000, paceMin: easyFast, paceMax: easySlow, isEasyControlled: true),
             RunnaStep(type: .repeat, iterations: 4, steps: [
-                RunnaStep(type: .run, distanceMeters: 400, paceMin: "5:00", paceMax: "5:00"),
-                RunnaStep(type: .run, distanceMeters: 400, paceMin: "5:40", paceMax: "5:40"),
+                RunnaStep(type: .run, distanceMeters: 400, paceMin: "5:00", paceMax: "5:00", isEasyControlled: false),
+                RunnaStep(type: .run, distanceMeters: 400, paceMin: "5:40", paceMax: "5:40", isEasyControlled: false),
                 RunnaStep(type: .recovery, durationSeconds: 90)
             ]),
-            RunnaStep(type: .cooldown, distanceMeters: 1200, paceMin: easyFast, paceMax: easySlow)
+            RunnaStep(type: .cooldown, distanceMeters: 1200, paceMin: easyFast, paceMax: easySlow, isEasyControlled: true)
         ]
     }
 }
