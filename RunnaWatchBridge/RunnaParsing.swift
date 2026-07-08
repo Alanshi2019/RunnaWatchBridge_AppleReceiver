@@ -43,7 +43,7 @@ enum RunnaTextParser {
         var repeatIterations: Int?
         var repeatSteps: [RunnaStep] = []
         var pendingEasyPace: (String, String)?
-        var pendingConversationPace = false
+        var pendingConversationalPace = false
 
         func flushRepeat() {
             if let n = repeatIterations, !repeatSteps.isEmpty {
@@ -68,12 +68,11 @@ enum RunnaTextParser {
         for line in lines {
             let lower = line.lowercased()
             if shouldIgnore(lower) { continue }
-            if lower.contains("warmup") || lower.contains("warm up") { section = "warmup"; continue }
             if lower.contains("cooldown") || lower.contains("cool down") { flushRepeat(); section = "cooldown"; continue }
             if lower.contains("repeat"), let n = firstInt(in: lower) { flushRepeat(); section = "set"; repeatIterations = n; continue }
             if lower == "set" || lower.contains(" set ") || lower.hasSuffix(" set") { section = "set"; continue }
-            if containsConversationPace(lower) {
-                pendingConversationPace = true
+            if containsConversationalPace(lower) {
+                pendingConversationalPace = true
             }
             if let pace = paceString(in: lower), lower.contains("no faster") {
                 pendingEasyPace = (pace, easySlow.isEmpty ? pace : easySlow)
@@ -82,12 +81,8 @@ enum RunnaTextParser {
             if let rest = restSeconds(in: lower) { append(RunnaStep(type: .recovery, durationSeconds: Double(rest))); continue }
             if let meters = distanceMeters(in: lower) {
                 let pace = paceString(in: lower)
-                var stepType: RunnaStepType = .run
-                if section == "warmup" { stepType = .warmup }
-                if section == "cooldown" { stepType = .cooldown }
-
-                let isConversationPace = containsConversationPace(lower) || pendingConversationPace
-                let isEasyControlled = stepType == .warmup || stepType == .cooldown || (stepType == .run && isConversationPace)
+                let stepType: RunnaStepType = section == "cooldown" ? .cooldown : .run
+                let isEasyControlled = stepType == .run && (containsConversationalPace(lower) || pendingConversationalPace)
 
                 let pMin: String?
                 let pMax: String?
@@ -102,8 +97,7 @@ enum RunnaTextParser {
                     pMax = nil
                 }
                 append(RunnaStep(type: stepType, distanceMeters: meters, paceMin: pMin, paceMax: pMax, isEasyControlled: isEasyControlled))
-                if section == "warmup" { section = "set" }
-                pendingConversationPace = false
+                pendingConversationalPace = false
             }
         }
         flushRepeat()
@@ -127,8 +121,8 @@ enum RunnaTextParser {
         ["stretches", "start workout", "athlete", "olympian", "wechat", "outdoor", "treadmill"].contains { lower.contains($0) }
     }
 
-    private static func containsConversationPace(_ lower: String) -> Bool {
-        lower.contains("conversation") || lower.contains("conversational") || lower.contains("easy run") || lower.contains("easy pace")
+    private static func containsConversationalPace(_ lower: String) -> Bool {
+        lower.contains("conversational pace")
     }
 
     private static func firstInt(in s: String) -> Int? { match(#"\d+"#, in: s).flatMap(Int.init) }
@@ -151,7 +145,7 @@ enum RunnaTextParser {
 
     private static func placeholderSteps(easyFast: String, easySlow: String) -> [RunnaStep] {
         [
-            RunnaStep(type: .warmup, distanceMeters: 2000, paceMin: easyFast, paceMax: easySlow, isEasyControlled: true),
+            RunnaStep(type: .run, distanceMeters: 2000, paceMin: easyFast, paceMax: easySlow, isEasyControlled: true),
             RunnaStep(type: .repeat, iterations: 4, steps: [
                 RunnaStep(type: .run, distanceMeters: 400, paceMin: "5:00", paceMax: "5:00", isEasyControlled: false),
                 RunnaStep(type: .run, distanceMeters: 400, paceMin: "5:40", paceMax: "5:40", isEasyControlled: false),
