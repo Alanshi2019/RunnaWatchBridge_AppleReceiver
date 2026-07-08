@@ -2,6 +2,7 @@ import SwiftUI
 import WorkoutKit
 import PhotosUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct RunnaBridgeHomeView: View {
     @State private var selectedItem: PhotosPickerItem?
@@ -13,6 +14,8 @@ struct RunnaBridgeHomeView: View {
     @State private var easyFast = "5:45"
     @State private var easySlow = "6:30"
     @State private var editingIndex: Int?
+    @State private var editingChildIndex: Int?
+    @State private var draggingStepID: UUID?
     @State private var draftStep = EditableStep()
     @State private var showEditor = false
     @State private var showResultAlert = false
@@ -112,8 +115,22 @@ struct RunnaBridgeHomeView: View {
                         startEditing(step, at: index)
                     } onDelete: {
                         deleteStep(at: index)
+                    } onEditChild: { childIndex in
+                        startEditingChild(parentIndex: index, childIndex: childIndex)
+                    } onDeleteChild: { childIndex in
+                        deleteChildStep(parentIndex: index, childIndex: childIndex)
                     }
+                    .opacity(draggingStepID == step.id ? 0.45 : 1)
+                    .onDrag {
+                        draggingStepID = step.id
+                        return NSItemProvider(object: step.id.uuidString as NSString)
+                    }
+                    .onDrop(of: [UTType.text], delegate: StepDropDelegate(targetStep: step, workout: $workout, draggingStepID: $draggingStepID, status: $status))
                 }
+
+                Text("Long press and drag a card to reorder top-level steps.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Button(action: addStep) {
                     Label("Add step", systemImage: "plus")
@@ -221,15 +238,38 @@ struct RunnaBridgeHomeView: View {
     }
 
     private func startEditing(_ step: RunnaStep, at index: Int) {
+        guard !step.usesEasyPaceZone else { return }
         editingIndex = index
+        editingChildIndex = nil
         draftStep = EditableStep(step: step)
+        showEditor = true
+    }
+
+    private func startEditingChild(parentIndex: Int, childIndex: Int) {
+        guard let current = workout,
+              current.steps.indices.contains(parentIndex),
+              let children = current.steps[parentIndex].steps,
+              children.indices.contains(childIndex) else { return }
+        let child = children[childIndex]
+        guard !child.usesEasyPaceZone else { return }
+        editingIndex = parentIndex
+        editingChildIndex = childIndex
+        draftStep = EditableStep(step: child)
         showEditor = true
     }
 
     private func saveDraftStep() {
         guard var current = workout, let index = editingIndex, current.steps.indices.contains(index) else { return }
-        current.steps[index] = applyEasyPace(to: draftStep.toRunnaStep())
+        let updated = applyEasyPace(to: draftStep.toRunnaStep())
+        if let childIndex = editingChildIndex {
+            guard var children = current.steps[index].steps, children.indices.contains(childIndex) else { return }
+            children[childIndex] = updated
+            current.steps[index].steps = children
+        } else {
+            current.steps[index] = updated
+        }
         workout = current
+        editingChildIndex = nil
         status = "已更新 step。"
     }
 
@@ -246,6 +286,17 @@ struct RunnaBridgeHomeView: View {
         current.steps.remove(at: index)
         workout = current
         status = "已删除 step。"
+    }
+
+    private func deleteChildStep(parentIndex: Int, childIndex: Int) {
+        guard var current = workout,
+              current.steps.indices.contains(parentIndex),
+              var children = current.steps[parentIndex].steps,
+              children.indices.contains(childIndex) else { return }
+        children.remove(at: childIndex)
+        current.steps[parentIndex].steps = children
+        workout = current
+        status = "已删除 repeat child step。"
     }
 
     private func applyEasyPaceToWorkout(updateStatus: Bool = true) {
@@ -281,6 +332,8 @@ struct RunnaBridgeHomeView: View {
         easyFast = "5:45"
         easySlow = "6:30"
         editingIndex = nil
+        editingChildIndex = nil
+        draggingStepID = nil
         draftStep = EditableStep()
         showEditor = false
         status = "上传 Runna 截图开始。"
@@ -308,5 +361,31 @@ struct RunnaBridgeHomeView: View {
             let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: Date().addingTimeInterval(120))
             await scheduler.schedule(plan, at: comps)
         }
+    }
+}
+
+private struct StepDropDelegate: DropDelegate {
+    let targetStep: RunnaStep
+    @Binding var workout: RunnaWorkout?
+    @Binding var draggingStepID: UUID?
+    @Binding var status: String
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingStepID,
+              var current = workout,
+              draggingStepID != targetStep.id,
+              let from = current.steps.firstIndex(where: { $0.id == draggingStepID }),
+              let to = current.steps.firstIndex(where: { $0.id == targetStep.id }) else { return }
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+            let moving = current.steps.remove(at: from)
+            current.steps.insert(moving, at: to)
+            workout = current
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingStepID = nil
+        status = "已更新 step 顺序。"
+        return true
     }
 }
