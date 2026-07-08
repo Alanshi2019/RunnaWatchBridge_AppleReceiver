@@ -8,6 +8,7 @@ struct EditableStep {
     var paceMax: String = "6:30"
     var iterations: String = "1"
     var isEasyControlled: Bool = false
+    var childSteps: [RunnaStep]?
 
     init() {}
 
@@ -19,19 +20,18 @@ struct EditableStep {
         paceMax = step.paceMax ?? ""
         iterations = step.iterations.map(String.init) ?? "1"
         isEasyControlled = step.isEasyControlled == true
+        childSteps = step.steps
     }
 
     func toRunnaStep() -> RunnaStep {
         RunnaStep(
             type: type,
-            distanceMeters: Double(distanceMeters),
-            durationSeconds: Double(durationSeconds),
-            paceMin: paceMin.isEmpty ? nil : paceMin,
-            paceMax: paceMax.isEmpty ? nil : paceMax,
-            iterations: Int(iterations),
-            steps: type == .repeat ? [
-                RunnaStep(type: .run, distanceMeters: Double(distanceMeters) ?? 400, durationSeconds: nil, paceMin: paceMin.isEmpty ? nil : paceMin, paceMax: paceMax.isEmpty ? nil : paceMax, iterations: nil, steps: nil, isEasyControlled: false)
-            ] : nil,
+            distanceMeters: type == .repeat ? nil : Double(distanceMeters),
+            durationSeconds: type == .repeat ? nil : Double(durationSeconds),
+            paceMin: type == .repeat ? nil : (paceMin.isEmpty ? nil : paceMin),
+            paceMax: type == .repeat ? nil : (paceMax.isEmpty ? nil : paceMax),
+            iterations: type == .repeat ? Int(iterations) : nil,
+            steps: type == .repeat ? childSteps : nil,
             isEasyControlled: type == .run ? isEasyControlled : nil
         )
     }
@@ -64,25 +64,36 @@ struct StepEditorView: View {
                     if draft.type == .repeat {
                         TextField("Iterations", text: $draft.iterations)
                             .keyboardType(.numberPad)
-                    }
-                    if draft.type != .recovery && draft.type != .rest {
-                        TextField("Distance meters", text: $draft.distanceMeters)
-                            .keyboardType(.decimalPad)
-                    }
-                    if draft.type == .recovery || draft.type == .rest {
-                        TextField("Duration seconds", text: $draft.durationSeconds)
-                            .keyboardType(.decimalPad)
-                    }
-                    TextField("Pace min", text: paceMinBinding)
-                        .keyboardType(.numbersAndPunctuation)
-                        .disabled(isPaceControlledByEasyZone)
-                    TextField("Pace max", text: paceMaxBinding)
-                        .keyboardType(.numbersAndPunctuation)
-                        .disabled(isPaceControlledByEasyZone)
-                    if isPaceControlledByEasyZone {
-                        Text("Controlled by Easy Pace Zone")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if let childSteps = draft.childSteps, !childSteps.isEmpty {
+                            Text("Child steps are edited from the workout list below the Repeat card.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            ForEach(childSteps) { child in
+                                Text(child.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        if draft.type != .recovery && draft.type != .rest {
+                            TextField("Distance meters", text: $draft.distanceMeters)
+                                .keyboardType(.decimalPad)
+                        }
+                        if draft.type == .recovery || draft.type == .rest {
+                            TextField("Duration seconds", text: $draft.durationSeconds)
+                                .keyboardType(.decimalPad)
+                        }
+                        TextField("Pace min", text: paceMinBinding)
+                            .keyboardType(.numbersAndPunctuation)
+                            .disabled(isPaceControlledByEasyZone)
+                        TextField("Pace max", text: paceMaxBinding)
+                            .keyboardType(.numbersAndPunctuation)
+                            .disabled(isPaceControlledByEasyZone)
+                        if isPaceControlledByEasyZone {
+                            Text("Controlled by Easy Pace Zone")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
