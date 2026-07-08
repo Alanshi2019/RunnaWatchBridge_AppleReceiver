@@ -62,7 +62,7 @@ struct StepCard: View {
         case .cooldown: return .red
         case .recovery, .rest: return .cyan
         case .repeat: return .purple
-        case .run: return .green
+        case .run: return step.isEasyControlled == true ? .green : .blue
         }
     }
 
@@ -72,7 +72,7 @@ struct StepCard: View {
         case .cooldown: return "Cool-down"
         case .recovery, .rest: return "Recovery"
         case .repeat: return "Interval"
-        case .run: return "Easy"
+        case .run: return step.isEasyControlled == true ? "Easy" : "Run"
         }
     }
 
